@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Contracts\ExchangeRateProvider;
+use App\Enums\RateMode;
 use App\Http\Responses\LoginResponse;
 use App\Models\Company;
 use App\Models\DeliveryOrder;
@@ -15,6 +17,8 @@ use App\Models\Station;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Services\CredentialVerifier;
+use App\Services\ExchangeRates\FixtureExchangeRateProvider;
+use App\Services\ExchangeRates\HttpExchangeRateProvider;
 use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -47,6 +51,13 @@ class AppServiceProvider extends ServiceProvider
 
         // After sign-in each role lands on its own page.
         $this->app->singleton(LoginResponseContract::class, LoginResponse::class);
+
+        // rates:sync talks to the provider for EXCHANGE_RATE_MODE; live mode
+        // never falls back to the fixture.
+        $this->app->bind(ExchangeRateProvider::class, fn ($app) => match (RateMode::current()) {
+            RateMode::Live => $app->make(HttpExchangeRateProvider::class),
+            RateMode::Fixture => $app->make(FixtureExchangeRateProvider::class),
+        });
     }
 
     /**

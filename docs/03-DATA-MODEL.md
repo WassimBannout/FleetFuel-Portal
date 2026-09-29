@@ -73,7 +73,7 @@ Both quota fields may be null (unlimited); zero means no further spend in that d
 - Immutable: repeated fetch of same observation is a no-op. If the provider sends conflicting data for an existing timestamp, log the discrepancy and preserve the accepted observation.
 - No bulk public rate endpoint. Provider errors are operational events, not valid rate rows.
 
-Source research's one row per date is insufficient for explicit intraday overrides. Effective instants plus expiry remove that ambiguity. Record sync status in a small `integration_sync_states` table (`name` unique, `last_attempt_at`, `last_success_at`, safe `last_error_code`) or an equivalently durable database-backed store; this is operational metadata, not financial history.
+Source research's one row per date is insufficient for explicit intraday overrides. Effective instants plus expiry remove that ambiguity. Record sync status in a small `integration_sync_states` table (`name` unique, `last_attempt_at`, `last_success_at`, safe `last_error_code`, nullable `next_attempt_at`) or an equivalently durable database-backed store; this is operational metadata, not financial history. The implementation keeps one row per rate mode (`exchange_rates.fixture`, `exchange_rates.live`); `next_attempt_at` holds the provider's next-update time or its 429 retry advice (added in M04, see DECISIONS).
 
 ## Ledger and monthly usage
 

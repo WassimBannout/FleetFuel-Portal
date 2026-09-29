@@ -3,8 +3,10 @@
 use App\Http\Controllers\Web\CompanyController;
 use App\Http\Controllers\Web\DashboardController;
 use App\Http\Controllers\Web\DriverController;
+use App\Http\Controllers\Web\ExchangeRateController;
 use App\Http\Controllers\Web\FuelCardController;
 use App\Http\Controllers\Web\ProductController;
+use App\Http\Controllers\Web\ProductPriceController;
 use App\Http\Controllers\Web\StationController;
 use App\Http\Controllers\Web\StationHomeController;
 use App\Http\Controllers\Web\TransactionController;
@@ -48,6 +50,7 @@ Route::middleware(['auth', 'active'])->group(function () {
     // Reference data: every role reads it; only admins change it.
     Route::get('/stations', [StationController::class, 'index'])->name('stations.index');
     Route::get('/products', [ProductController::class, 'index'])->name('products.index');
+    Route::get('/products/{product}/prices', [ProductPriceController::class, 'index'])->name('products.prices.index');
 
     Route::middleware('role:admin')->group(function () {
         Route::resource('companies', CompanyController::class)->except(['show', 'destroy']);
@@ -58,6 +61,12 @@ Route::middleware(['auth', 'active'])->group(function () {
 
         Route::resource('products', ProductController::class)->only(['edit', 'update']);
         Route::patch('/products/{product}/active', [ProductController::class, 'updateActive'])->name('products.active');
+        Route::post('/products/{product}/prices', [ProductPriceController::class, 'store'])->name('products.prices.store');
+
+        // USD/LBP status and manual overrides. Syncing itself is the
+        // scheduled `rates:sync` command, never a page request.
+        Route::get('/integrations/exchange-rates', [ExchangeRateController::class, 'index'])->name('integrations.exchange-rates');
+        Route::post('/integrations/exchange-rates/overrides', [ExchangeRateController::class, 'store'])->name('integrations.exchange-rates.overrides.store');
     });
 
     // Fleet: admins for every company, managers for their own.

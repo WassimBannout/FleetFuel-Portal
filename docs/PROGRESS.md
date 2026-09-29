@@ -4,24 +4,31 @@ Updated: 2026-09-29
 
 ## Current state
 
-- **M03 Fleet and reference-data UI is DONE and verified locally on MySQL 8.4**, on top of M00–M02.
-  - Screens: paginated Bootstrap pages for companies, stations and products (admin) and for vehicles, drivers and fuel cards (admin and owning manager).
-  - Cards: audited quota and block/unblock/archive controls under the card row lock, assignments locked after the first purchase, and confirmation for quota cuts below usage.
-  - Tenant scope: every route parameter is tenant-scoped (404 across companies); wrong-role and missing-ability requests stay 403.
-  - Nothing is deleted.
-- The dev database holds the M01 demo plus the M03 live walkthrough records: company "Walkthrough Haulage" (tax no. LB-DEMO-3001), vehicle `WLK 001`, driver `WLK-DL-1`, and a card ending `9SVR`, which is blocked. All are fictional and additive; the demo cards were not changed.
-- Pricing/FX, POS ingestion, deliveries and reports are not built yet (M04+). The only API endpoints are `POST`/`DELETE /api/v1/auth/token`.
-- Local URL: <http://localhost:8080> (sign-in `/login`, readiness `/health`, liveness `/up`).
-- A local Git repository exists (`main`) with **no commits and no remote**. The Git identity was not changed.
-- CI workflow `.github/workflows/ci.yml` passes actionlint but **has not run on GitHub** (no remote). Its `make verify` now includes the M03 suites.
+- **M04 Prices and exchange rates is DONE and verified locally on MySQL 8.4**, on top of M00–M03.
+  - `PriceResolver` picks the price and USD/LBP rate in effect at an instant: a valid manual override first, then provider (live mode) or fixture (fixture mode) observations.
+  - `rates:sync` fetches through `ExchangeRateProvider` (HTTP or fixture) with bounded retries, the provider's next-update hint, per-mode sync state and no overlap. It runs daily at 01:00 UTC.
+  - Admins publish audited, append-only LBP prices. Every role reads the price timeline.
+  - The admin integration-status page shows the rate in effect, degradation and recent observations, and takes audited manual overrides (at most 72 hours, never retroactive).
+- Dev database: the M01 demo plus the M03 walkthrough records, plus from M04:
+  - the migration `2026_09_29_120001` (additive column);
+  - one fixture observation for 2026-09-29 (from a fixture-mode `rates:sync`);
+  - one **real provider observation** from the single labeled live run (89500.00000000 LBP per USD, effective 2026-09-29T00:02:31Z, expires 2026-10-02T00:02:31Z);
+  - the two `integration_sync_states` rows.
+
+  Fixture mode ignores the provider row. No price or override was written to the dev database.
+- Not built yet: POS ingestion, deliveries and reports (M05+). The only API endpoints are `POST`/`DELETE /api/v1/auth/token`.
+- Local URL: <http://localhost:8080> (sign-in `/login`, readiness `/health`, liveness `/up`, exchange rates `/integrations/exchange-rates`).
+- Git: branch `main` tracks `origin/main` (github.com/WassimBannout/FleetFuel-Portal).
+  - M00–M03 were committed by the user as `86287bb` and pushed. GitHub Actions run 36551839506 passed on it: Pint PASS on 183 files, Larastan OK, 254 tests / 2375 assertions, npm 0 vulnerabilities, Vite build OK, and the repeated-setup step passed.
+  - M04 is committed and pushed in the commit that contains this file. Its CI result had not been observed when this file was written.
 
 ## Next action
 
-Execute `prompts/04-pricing-rates.md` (M04): BigDecimal pricing, `PriceResolver`, the `ExchangeRateProvider` interface with an HTTP implementation, fixture and live modes, bounded fallback, the audited admin FX override, `rates:sync` with its schedule, and the integration-status and price-timeline screens. Starting points from M03:
+Execute `prompts/05-pos-transactions.md` (M05): FuelTransactionService, canonical request hashing, station-derived scope, card and usage locks, the unique `(station_id, external_ref)` key, snapshots and replay semantics. Starting points from M04:
 
-- Publish prices with the M03 patterns: a Form Request, a service using `AuditService` in one transaction, and `ProductPricePolicy::create` (admin only). The product edit page is the natural place for the price timeline.
-- Validate price and rate input with `App\Rules\DecimalString` (price `DECIMAL(18,4)` means `new DecimalString(14, 4)`), and normalize with `App\Support\Decimal`.
-- Reuse `App\Support\FuelAmounts` and `ExchangeRatePolicy` (admin only). `LedgerFixtureBuilder` already contains the fixture-mode rate precedence (manual override first, then fixture) that `PriceResolver` must replace.
+- Price a purchase with `PriceResolver::quote($product, $liters, $transactedAt)`. It returns the price row, rate row and rounded `amountLbp`/`amountUsd`, and throws `PriceUnavailable` (422), `RateUnavailable` (503) or a liters/overflow `ValidationException` (422). Call it inside the card lock; it only reads the database.
+- Replace `LedgerFixtureBuilder::recordPurchase()` internals with the new service, or have both share it, as the M01 record says.
+- Replay must be checked before price/rate resolution (docs/04-BUSINESS-RULES.md step 3), so an expired rate cannot block a valid replay (T15).
 
 ## Milestone ledger
 
@@ -31,7 +38,7 @@ Execute `prompts/04-pricing-rates.md` (M04): BigDecimal pricing, `PriceResolver`
 | M01 Data model | DONE | T02 on MySQL: migrations roll back and reapply; FK/unique/CHECK constraints enforced; seed reconciliation exact; seeding deterministic and repeatable; ER diagram test matches MySQL foreign keys. `make verify`: 100 tests, 870 assertions |
 | M02 Auth/security | DONE | T03, and T04–T06 for the implemented surfaces, on MySQL: two-company and two-station tests on real routes, manager A denied B's data (404), wrong role denied (403), revoked/expired/disabled tokens rejected (401), CSRF tested with the real middleware. `make verify`: 194 tests, 1933 assertions. T05 write routes (quotas, prices) are policy-level until M03/M04 wire them to screens |
 | M03 Fleet CRUD | DONE | T04/T05/T07/T08 on real routes (MySQL): cross-company vehicle/driver IDs refused, card company immutable, used-card assignment locked, quota/block/deactivation audits with before/after values, operators 403, managers 404 on other companies' records, no delete routes (405), input escaped. Company → vehicle/driver → card and a blocked card walked through live. `make verify`: 254 tests, 2375 assertions |
-| M04 Pricing/FX | TODO | Depends on M03 |
+| M04 Pricing/FX | DONE | T09–T12 (ledger-immutability part of T10/T12 completes in M05) on MySQL with faked HTTP: exact 20 L sample (1600000.00 LBP / 17.88 USD), half-up edges, overflow/excess-scale inputs, exact price boundary, missing price 422, manual > provider/fixture precedence, expired/missing rate 503, live ignores fixtures, success/schema/timeout/5xx/429 with bounded attempts, deduplicated observations. One live sync run, labeled. `make verify`: 349 tests, 2800 assertions |
 | M05 POS ingestion | TODO | Depends on M04 |
 | M06 API/tooling | TODO | Depends on M05 |
 | M07 Deliveries | TODO | Depends on M06 |
@@ -43,7 +50,117 @@ Execute `prompts/04-pricing-rates.md` (M04): BigDecimal pricing, `PriceResolver`
 
 Use TODO / IN PROGRESS / DONE / BLOCKED. A milestone is DONE only when its checks pass. If an external prerequisite blocks one part, record exactly which part and finish independent local work.
 
-## Most recent session: M03
+## Most recent session: M04
+
+**Date / milestone:** 2026-09-29, M04 Prices and external FX.
+
+**Goal and actual state:**
+- Goal: decimal pricing, effective price resolution, `ExchangeRateProvider`, validated observation storage, fixture/live modes, scheduled sync, bounded fallback and expiring audited manual overrides, with no FX fetch in transactions or page requests, and attribution where rates are used.
+- Result: done, and all local gates pass on MySQL.
+- M03 had nothing outstanding: GitHub CI passed on the pushed M00–M03 commit (see "Current state").
+
+### What was built
+
+- **Pricing:**
+  - `App\Services\PriceResolver`: `findPrice`/`priceAt`, `findRate`/`rateAt` (mode-aware), and `quote()`, which re-validates liters and checks column bounds.
+  - `App\Support\PriceQuote`.
+  - `App\Exceptions\PriceUnavailable` (422) and `RateUnavailable` (503).
+  - `Decimal::fits()` and `FuelAmounts::indicativeUnitPriceUsd()`.
+  - `App\Services\ProductPriceService::publish()`: now or later, audited `product_price.published`.
+- **Exchange rates:**
+  - `App\Contracts\ExchangeRateProvider`.
+  - `App\Services\ExchangeRates\HttpExchangeRateProvider`: timeouts 3 s / 10 s, at most 3 attempts, retries only on no response or 5xx with `Sleep` pauses of 500/1000 ms, 429 retry advice, strict response checks, float-free eight-decimal normalization.
+  - `FixtureExchangeRateProvider`: no HTTP.
+  - `App\Enums\RateMode` and `ObservationOutcome`; `RateSource::label()`.
+  - `App\Support\RateObservation` and `RateSyncResult`; `App\Exceptions\ExchangeRateFetchFailed`, which carries safe codes.
+  - `App\Services\ExchangeRateService`: `recordObservation()` stores once and logs conflicts; `createOverride()` is audited as `exchange_rate.override_created`.
+  - `App\Services\ExchangeRateSync`: cache lock, next-update hint, per-mode `integration_sync_states`.
+  - `ExchangeRate` scopes `usdLbp()`/`eligibleAt()` and `isEligibleAt()`; `IntegrationSyncState::errorDescription()`.
+- **Commands and wiring:**
+  - `rates:sync [--force]` (`app/Console/Commands/SyncExchangeRates.php`).
+  - A daily 01:00 UTC schedule with `withoutOverlapping()` in `routes/console.php`.
+  - The provider is bound by mode in `AppServiceProvider`.
+  - New constants in `config/fleetfuel.php` (fixture rate, HTTP limits, clock skew, sync time).
+  - The migration `2026_09_29_120001_add_next_attempt_at_to_integration_sync_states_table`.
+- **HTTP layer:**
+  - `Web\ProductPriceController` (timeline for all roles, publish for admins) and `Web\ExchangeRateController` (admin status and overrides).
+  - `StoreProductPriceRequest` and `StoreExchangeRateOverrideRequest`, plus the `ParsesBusinessTime` concern (Beirut `datetime-local` to UTC).
+  - Four routes in `routes/web.php`.
+- **Views:**
+  - `products/prices`, `integrations/exchange-rates`, `integrations/rate-status`, `partials/rate-attribution` and `partials/indicative-rate-note`.
+  - `products/index` shows the current price, indicative USD and a Prices link.
+  - `transactions/show` shows the source label, plus attribution for provider snapshots.
+  - The layout got an admin-only "Exchange rates" link.
+- **Refactor:**
+  - `LedgerFixtureBuilder` prices purchases through `PriceResolver` with `RateMode::Fixture`; its private `priceAt`/`rateAt` were removed.
+  - `DemoSeeder` reads the fixture rate from config.
+- **Tests (95 new):**
+  - `tests/Feature/Pricing/{PriceResolverTest 16, ProductPriceScreensTest 18}`;
+  - `tests/Feature/ExchangeRates/{HttpExchangeRateProviderTest 22, RatesSyncCommandTest 11, IntegrationStatusScreenTest 17}`;
+  - `tests/Unit/Support/DecimalTest` (10), and 1 new `FuelAmountsTest` case.
+  - `tests/TestCase.php` now calls `Http::preventStrayRequests()`.
+- **Docs:** README (status, "Prices and exchange rates"), `docs/DECISIONS.md` (M04 record), `docs/03-DATA-MODEL.md` (`next_attempt_at`), CHANGELOG, `.env.example` comment.
+
+### Checks: exact command and actual outcome
+
+| Command | Outcome |
+| --- | --- |
+| `gh run list` / job steps and log for `86287bb` | Run 36551839506 `success`, with every step green; the log shows `Tests: 254 passed (2375 assertions)`, Pint PASS on 183 files, `[OK] No errors` |
+| `make analyse` after the core classes and screens | `[OK] No errors` |
+| Seeder, builder, amounts and schema suites after the builder refactor (first run) | **45 failed, 23 passed**: `BigDecimal::stripTrailingZeros()` does not exist in brick/math 1.0 (the method is `strippedOfTrailingZeros()`). Fixed: 68 passed / 771 assertions, so seeded history is unchanged |
+| New suites (first runs) | Resolver + decimal + amounts: 34 passed. Provider: 22 passed / 63 assertions. `rates:sync`: 11 passed / 71. Integration page: 17 passed / 114. Price screens: **2 failed, 16 passed**, both test mistakes: (1) the MySQL JSON audit column does not keep key order, so the test now uses `assertEquals`; (2) the view wraps "rate of" and the value onto separate lines, so the test now uses `assertSeeInOrder`. Then 18 passed / 127 |
+| `make verify` #1 | **exit 2 at analyse**: 3 Larastan errors in tests (a nullsafe call on an expression PHPStan had narrowed; `Log::shouldHaveReceived()` is unknown on the facade). Fixed with a loop variable and the spy object |
+| `make verify` #2 | exit 0: Pint PASS on 211 files, Larastan OK, **349 tests / 2800 assertions** (78.88 s), `npm ci` 0 vulnerabilities, Vite build OK |
+| `make verify` #3, after the last docblock and doc edits (the committed tree) | exit 0: Pint PASS on 211 files, Larastan OK, **349 tests / 2800 assertions** (84.14 s), 0 vulnerabilities, Vite build OK |
+| Negative checks (each file mutated, the matching suite run, then restored and checksum-verified) | Automated source before manual → 2 failed. Rate still eligible at `expires_at` → 2 failed. Live mode reading fixtures → 2 failed. A fourth attempt allowed → 2 failed. 429 not special-cased → 3 failed. Fetch time stored as observation time → 4 failed. Next-update hint ignored → 3 failed. Past price start accepted → 1 failed. Retroactive override accepted → 1 failed. Overflow check removed → 1 failed |
+| `sh docker/bin/check-setup-preserves-state.sh` | PASS. It applied only `2026_09_29_120001_add_next_attempt_at…` (32.75 ms); env files and APP_KEY kept; demo "nothing changed" |
+| `docker compose exec -T app php artisan rates:sync` twice (fixture mode, dev) | 1st: "Stored the Fixture (synthetic) observation of 89500.00000000 LBP per USD at 2026-09-29T00:00:00Z." 2nd: "Nothing fetched: the next fixture update is not due until 2026-09-30T00:00:00Z." `schedule:list`: `0 1 * * * php artisan rates:sync` |
+| **LIVE, one manual request:** `docker compose exec -T -e EXCHANGE_RATE_MODE=live app php artisan rates:sync` | exit 0: "Stored the Provider observation of 89500.00000000 LBP per USD at 2026-09-29T00:02:31Z." Row: fetched 16:11:02Z, expires 2026-10-02T00:02:31Z; state `exchange_rates.live` has no error and next attempt 2026-09-30T00:25:01Z. The provider's value happens to equal the fictional fixture constant. The resolver in fixture mode still returns the fixture row |
+| Walkthrough through nginx (curl, real sessions and CSRF; password read from `.env`, never printed) | Admin: `/products` 200 with "LBP per liter", indicative `0.8939` and the fixture-rate note; DIESEL timeline 200 with the publish form; `/integrations/exchange-rates` 200 (fixture mode, rate in effect, expired overrides). A retroactive price POST (no `-L`) → 302 back with "A new price cannot start in the past."; `product_prices` count 6 before and after. manager.atlas: timeline 200; integration page 403; price POST 403 |
+
+### Not run or not verified
+
+- The ledger parts of T10/T12 (an accepted purchase snapshotting price and rate, a replay after a price change) need POS ingestion, which is M05. M04 checks that publishing a price leaves seeded purchase snapshots unchanged.
+- Real provider failures: timeouts, 5xx and 429 were only faked. The one live request succeeded.
+- The scheduler firing at 01:00 UTC was not observed; the registration is tested and `schedule:list` shows it.
+- A visual browser check of the new pages (password kept out of the transcript); M09 does visual polish.
+- The API price preview `GET /api/v1/products/prices` (M06) will reuse `PriceResolver`.
+- SQL Server (S01).
+
+### Decisions and deviations
+
+All are in `docs/DECISIONS.md` (2026-09-29, M04):
+
+- rate modes;
+- float-free provider normalization;
+- timestamp sanity rules;
+- retry and 429 policy;
+- per-mode sync state and `next_attempt_at` (the only schema change);
+- overrides as start plus 1–72 hours;
+- price start rules;
+- indicative USD;
+- where attribution appears;
+- stray-request blocking in tests.
+
+No product rule changed.
+
+### Remaining work and blockers
+
+None for M04. Deliberately later:
+
+- POS ingestion using `PriceResolver` (M05);
+- the price-preview API (M06);
+- report pages showing stored amounts (M08);
+- visual polish (M09).
+
+**Suggested commit message:** `feat: add historical pricing and resilient exchange-rate sync`. The user asked for this commit and push in this session.
+
+**One concept to explain:** why reports use stored amounts, and why the latest rate cannot create historical rates.
+- A purchase is priced once, at its event time, with the price and rate in effect then. Those values are copied onto the transaction row.
+- The provider's open endpoint only says what the rate is now. Using it for an old purchase would silently reprice history.
+- So observations are stored at the provider's own timestamp and expire after 72 hours. An override can never start in the past. When nothing valid covers an instant, the answer is `rate_unavailable`, not a guess.
+
+## Earlier session: M03
 
 **Date / milestone:** 2026-09-29, M03 Fleet and reference-data UI.
 

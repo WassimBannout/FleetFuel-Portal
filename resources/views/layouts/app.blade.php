@@ -30,6 +30,7 @@
                             $navUser->can('viewAny', App\Models\FuelCard::class) ? ['cards.index', 'Cards', 'cards.*'] : null,
                             ['stations.index', 'Stations', 'stations.*'],
                             ['products.index', 'Products', 'products.*'],
+                            $navUser->can('viewAny', App\Models\ExchangeRate::class) ? ['integrations.exchange-rates', 'Exchange rates', 'integrations.*'] : null,
                         ]);
                     @endphp
                     <ul class="navbar-nav me-auto">

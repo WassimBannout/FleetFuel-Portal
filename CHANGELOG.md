@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- M04 prices and exchange rates:
+  - `PriceResolver`: the price and USD/LBP rate in effect at an instant, with a valid manual override first, then provider (live mode) or fixture (fixture mode) observations. `price_unavailable` (422) and `rate_unavailable` (503) instead of a zero or 1:1 value. Rounded purchase amounts are checked against their column bounds.
+  - `ExchangeRateProvider` with an HTTP implementation for ExchangeRate-API's open endpoint:
+    - short timeouts and at most 3 attempts, retrying only on timeouts and 5xx;
+    - a 429 records retry advice;
+    - strict response checks; eight-decimal normalization without float arithmetic.
+    - A fixture implementation makes no HTTP request.
+  - `rates:sync` (daily at 01:00 UTC, without overlapping, plus manual runs and `--force`):
+    - stores each observation once at the provider's own time and logs conflicting values;
+    - respects the provider's next-update time;
+    - records the sync state per mode;
+    - leaves stored rates untouched on failure.
+  - Admin price publishing (now or later, audited, append-only) and a price timeline in LBP per liter, readable by every role, with indicative USD.
+  - Admin integration-status page: the rate in effect, sync result and degradation, recent observations, and audited manual overrides (start now or later, at most 72 hours).
+  - Provider attribution wherever its rates are shown. Tests block every unfaked outbound HTTP request.
+  - Migration: `integration_sync_states.next_attempt_at`.
 - M03 fleet and reference data:
   - Paginated Bootstrap screens for companies, stations, products, vehicles, drivers and fuel cards, with filters and literal search. Records are deactivated or archived, never deleted.
   - Fuel cards:

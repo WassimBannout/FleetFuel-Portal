@@ -19,4 +19,17 @@ final class Decimal
     {
         return BigDecimal::of($value)->isLessThan($than);
     }
+
+    /**
+     * Whether the value can be stored in a DECIMAL(precision, scale) column
+     * without rounding or overflow: at most `scale` significant decimal
+     * places and `precision - scale` integer digits.
+     */
+    public static function fits(string $value, int $precision, int $scale): bool
+    {
+        $decimal = BigDecimal::of($value);
+
+        return $decimal->strippedOfTrailingZeros()->getScale() <= $scale
+            && $decimal->abs()->isLessThan(BigDecimal::ten()->power($precision - $scale));
+    }
 }

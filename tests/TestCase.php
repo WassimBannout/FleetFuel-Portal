@@ -5,6 +5,7 @@ namespace Tests;
 use Illuminate\Auth\AuthManager;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Illuminate\Support\Facades\Http;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -33,6 +34,9 @@ abstract class TestCase extends BaseTestCase
 
         // Pages render without a Vite manifest, so tests never depend on `make build`.
         $this->withoutVite();
+
+        // No test reaches the network: an HTTP call that is not faked fails.
+        Http::preventStrayRequests();
     }
 
     /**

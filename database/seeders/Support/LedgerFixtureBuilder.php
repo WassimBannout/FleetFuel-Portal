@@ -5,6 +5,7 @@ namespace Database\Seeders\Support;
 use App\Enums\CardStatus;
 use App\Enums\CompanyStatus;
 use App\Enums\DeliveryStatus;
+use App\Enums\RateMode;
 use App\Enums\RateSource;
 use App\Enums\UserRole;
 use App\Models\AuditLog;
@@ -16,9 +17,9 @@ use App\Models\ExchangeRate;
 use App\Models\FuelCard;
 use App\Models\FuelTransaction;
 use App\Models\Product;
-use App\Models\ProductPrice;
 use App\Models\Station;
 use App\Models\User;
+use App\Services\PriceResolver;
 use App\Support\BusinessMonth;
 use App\Support\FuelAmounts;
 use App\Support\PosRequestHash;
@@ -45,6 +46,8 @@ use LogicException;
  */
 final class LedgerFixtureBuilder
 {
+    public function __construct(private readonly PriceResolver $prices) {}
+
     public function recordPurchase(
         FuelCard $card,
         Station $station,
@@ -67,10 +70,13 @@ final class LedgerFixtureBuilder
 
             $this->assertPurchaseAllowed($card, $station, $operator, $product);
 
-            $price = $this->priceAt($product, $transactedAt);
-            $rate = $this->rateAt($transactedAt);
-            $amountLbp = FuelAmounts::amountLbp($liters, $price->price_lbp);
-            $amountUsd = FuelAmounts::amountUsd($amountLbp, $rate->rate);
+            // Demo history is synthetic, so it is priced in fixture mode
+            // whatever EXCHANGE_RATE_MODE says (live mode ignores fixtures).
+            $quote = $this->prices->quote($product, $liters, $transactedAt, RateMode::Fixture);
+            $price = $quote->price;
+            $rate = $quote->rate;
+            $amountLbp = $quote->amountLbp;
+            $amountUsd = $quote->amountUsd;
             $quotaMonth = BusinessMonth::for($transactedAt);
 
             $usage = $this->lockedUsage($card, $quotaMonth);
@@ -321,40 +327,6 @@ final class LedgerFixtureBuilder
         if ($card->monthly_limit_usd !== null && BigDecimal::of($usage->used_usd)->plus($amountUsd)->isGreaterThan($card->monthly_limit_usd)) {
             throw new LogicException("Fixture purchase on {$card->card_no} would exceed its USD quota.");
         }
-    }
-
-    private function priceAt(Product $product, CarbonImmutable $at): ProductPrice
-    {
-        return ProductPrice::query()
-            ->where('product_id', $product->id)
-            ->where('effective_from', '<=', $at)
-            ->orderByDesc('effective_from')
-            ->first()
-            ?? throw new LogicException("No {$product->code} price is effective at {$at->toIso8601ZuluString()}.");
-    }
-
-    /**
-     * Fixture-mode resolution: the latest eligible manual override, otherwise
-     * the latest eligible fixture observation (M04 adds live provider mode).
-     */
-    private function rateAt(CarbonImmutable $at): ExchangeRate
-    {
-        foreach ([RateSource::Manual, RateSource::Fixture] as $source) {
-            $rate = ExchangeRate::query()
-                ->where('base', 'USD')
-                ->where('quote', 'LBP')
-                ->where('source', $source)
-                ->where('effective_at', '<=', $at)
-                ->where('expires_at', '>', $at)
-                ->orderByDesc('effective_at')
-                ->first();
-
-            if ($rate !== null) {
-                return $rate;
-            }
-        }
-
-        throw new LogicException("No eligible USD/LBP rate at {$at->toIso8601ZuluString()}.");
     }
 
     private function lockedUsage(FuelCard $card, string $month): CardMonthlyUsage

@@ -137,4 +137,49 @@ These are implementation defaults chosen to make the research actionable. They a
 - Admins see a card's audit history on its page; the full audit screen with filters is later UI work. Card numbers are masked in lists and shown in full on the card page to the admin and the owning manager.
 - Testing note: the session uses JSON serialization, Laravel 13's default. Calling `assertSessionHasErrors()` between two requests in one test re-loads the session and empties the error bag of the next simulated request. Tests that check a page after a refused form follow the redirect in one chain. The real app shows the errors; this was verified live through nginx.
 
+2026-09-29 (M04): Prices and exchange rates within D06, D07, D09, D10 and D22. No product rule changed. One schema addition: `integration_sync_states.next_attempt_at` (03-DATA-MODEL updated). The points below fill in details the specs leave open.
+
+- Rate modes (`App\Enums\RateMode`, from `EXCHANGE_RATE_MODE`; any other value is a startup error):
+  - Fixture mode reads fixture rows and ignores provider rows. Live mode reads provider rows and ignores fixture rows.
+  - A valid manual override wins in both modes (latest `effective_at` first).
+  - Eligibility at instant T is `effective_at <= T < expires_at`, in one model scope that both `PriceResolver` and the status page use.
+  - A live failure never creates or falls back to a fixture row.
+- `PriceResolver` only reads the database:
+  - price: the latest `effective_from <= T`, else `price_unavailable` (422);
+  - rate: as above, else `rate_unavailable` (503).
+  - `quote()` also re-validates the liters string (the `DecimalString` rule) and checks that `amount_lbp` fits DECIMAL(20,2) and `amount_usd` fits DECIMAL(18,2). An overflow is a validation error (422 `validation_failed`), as a backstop for the M05 request layer.
+  - `LedgerFixtureBuilder` now prices seeded purchases through it with `RateMode::Fixture`, because demo history is synthetic whatever mode runs. Seeded history is unchanged: the seeder and builder tests pass as before.
+- Provider response (`HttpExchangeRateProvider`, fixed URL from config):
+  - `result` must be `success` and `base_code` must be `USD`.
+  - `rates.LBP` must be a JSON number (a string is refused), positive after rounding, with at most 12 integer digits.
+  - PHP decodes a JSON number into a float. It is written back out as its shortest exact decimal text and rounded half-up to 8 decimals at once; no arithmetic is done on the float. About 15 significant digits survive, which is exact for any USD/LBP rate with 8 decimals below 10^7.
+  - `effective_at` is `time_last_update_unix`. It is refused if more than 5 minutes ahead of our clock, or if it is already 72 hours old, since it would expire on arrival (`stale_observation`).
+  - `time_next_update_unix` is used as a hint only when it is after the observation time.
+- Retries:
+  - at most 3 attempts in total, retrying only on no response or timeout (`ConnectionException`) and HTTP 5xx, with pauses of 500 ms and 1000 ms;
+  - connect timeout 3 s, total timeout 10 s, redirects not followed.
+  - A 429 ends the run: the next attempt waits for `Retry-After` (seconds or an HTTP date, capped at 24 hours), else the provider's documented 20 minutes.
+  - Other 4xx and invalid bodies are not retried.
+  - Failures store only a short code (`connection_failed`, `server_error`, `rate_limited`, `http_error`, `invalid_response`, `provider_error`, `unexpected_base`, `invalid_rate`, `invalid_timestamp`, `stale_observation`), never the response.
+- `rates:sync`:
+  - It keeps one `integration_sync_states` row per mode (`exchange_rates.fixture`, `exchange_rates.live`), so switching modes does not inherit the other mode's next-update time.
+  - `next_attempt_at` holds the provider's next update after a success, or the 429 retry advice. A run before it downloads nothing unless `--force` is passed.
+  - Runs never overlap: the command takes the cache lock `rates-sync`, and the daily schedule (01:00 UTC) also uses `withoutOverlapping()`.
+  - A repeated observation is a no-op. A different value for an instant already stored keeps the stored row, logs a warning with both values, and sets `last_error_code = conflicting_observation`.
+  - Pages never sync, so there is no "sync now" button; the status page shows the command.
+- Fixture mode: `rates:sync` makes no HTTP request and stores one `fixture` row at 00:00 UTC per UTC day, valid for 72 hours. Its value is the config constant `fleetfuel.exchange_rates.fixture_rate` (89500.00000000, fictional), which the demo seeder now reads too.
+- Manual overrides are entered as a start (empty means now, else a later Beirut time) plus a validity of 1–72 whole hours, instead of a free-form expiry timestamp, so the 72-hour limit holds by construction.
+  - `ExchangeRateService` re-checks both rules.
+  - An override cannot be edited or ended early; a newer override takes precedence, or it expires on its own.
+  - Two overrides starting in the same second are refused.
+  - Audit action: `exchange_rate.override_created` (rate, effective_at, expires_at, reason).
+- Prices: an empty start means now (the server's current second); otherwise a later Beirut minute.
+  - A past start or a second price at the same instant is refused.
+  - Audit action: `product_price.published` (product_code, price_lbp, effective_from).
+  - Every role reads a product's timeline, non-admins only for active products (the scoped `{product}` binding). Admins also see who published each price and when.
+  - Admins may publish a price for an inactive product, ready for reactivation.
+- Indicative USD per liter (products list and timeline) is `price_lbp ÷ rate`, rounded half-up to 4 decimals with the rate in effect now. It is for display only and is hidden when no rate is valid. Purchases store their own amounts (M05).
+- D22 attribution: "Rates By Exchange Rate API", linking to exchangerate-api.com, appears wherever a provider rate is shown: products list, timeline, the integration page in live mode, and purchase detail when its snapshot source is `provider`. Only USD/LBP is stored; the provider feed is not republished.
+- Tests: `Http::preventStrayRequests()` in `tests/TestCase.php`, so any unfaked outbound request fails a test. Retry pauses use Laravel's `Sleep`, faked in tests to assert the exact pauses.
+
 Template: date, affected decision, old/new behavior, reason, spec/test updates, migration implications.

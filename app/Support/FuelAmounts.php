@@ -12,8 +12,8 @@ use Brick\Math\RoundingMode;
  *   amount_usd = round_half_up(amount_lbp ÷ rate_lbp_per_usd, 2)
  *
  * USD is derived from the rounded LBP amount, never from a rounded per-liter
- * USD price, and no PHP float is involved. Validating input scale and bounds
- * is the request layer's job (M04/M05); this class only calculates.
+ * USD price, and no PHP float is involved. This class only calculates:
+ * PriceResolver::quote() validates the input and checks the column bounds.
  */
 final class FuelAmounts
 {
@@ -28,6 +28,16 @@ final class FuelAmounts
     {
         return (string) BigDecimal::of($amountLbp)
             ->dividedBy($rateLbpPerUsd, 2, RoundingMode::HalfUp);
+    }
+
+    /**
+     * Indicative USD per liter for price lists, to 4 decimals. Display only:
+     * a purchase's USD amount comes from its rounded LBP amount instead.
+     */
+    public static function indicativeUnitPriceUsd(string $unitPriceLbp, string $rateLbpPerUsd): string
+    {
+        return (string) BigDecimal::of($unitPriceLbp)
+            ->dividedBy($rateLbpPerUsd, 4, RoundingMode::HalfUp);
     }
 
     /**

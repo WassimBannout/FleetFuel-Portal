@@ -68,10 +68,13 @@
                         <dt class="col-sm-5">Exchange rate</dt>
                         <dd class="col-sm-7">{{ Display::decimal($transaction->rate_lbp_per_usd, 8) }} LBP per USD</dd>
                         <dt class="col-sm-5">Rate source</dt>
-                        <dd class="col-sm-7">{{ ucfirst($transaction->rate_source->value) }}, effective {{ Display::businessTime($transaction->rate_effective_at) }}</dd>
+                        <dd class="col-sm-7">{{ $transaction->rate_source->label() }}, effective {{ Display::businessTime($transaction->rate_effective_at) }}</dd>
                         <dt class="col-sm-5">Amount (USD)</dt>
                         <dd class="col-sm-7 mb-0 fw-semibold">{{ Display::decimal($transaction->amount_usd) }}</dd>
                     </dl>
+                    @if ($transaction->rate_source === App\Enums\RateSource::Provider)
+                        @include('partials.rate-attribution')
+                    @endif
                 </div>
             </div>
         </div>

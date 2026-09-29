@@ -44,9 +44,6 @@ use RuntimeException;
  */
 class DemoSeeder extends Seeder
 {
-    /** Fictional USD/LBP constant used by fixture observations. */
-    public const FIXTURE_RATE = '89500.00000000';
-
     /** LBP per liter from the start of the as-of Beirut month (docs/examples/fixtures.json). */
     public const CURRENT_PRICES = ['ULP95' => '85000.0000', 'ULP98' => '88000.0000', 'DIESEL' => '80000.0000'];
 
@@ -263,7 +260,8 @@ class DemoSeeder extends Seeder
             ExchangeRate::query()->forceCreate([
                 'base' => 'USD',
                 'quote' => 'LBP',
-                'rate' => self::FIXTURE_RATE,
+                // The fictional constant rates:sync also uses in fixture mode.
+                'rate' => (string) config('fleetfuel.exchange_rates.fixture_rate'),
                 'source' => RateSource::Fixture,
                 'effective_at' => $day,
                 'fetched_at' => null,

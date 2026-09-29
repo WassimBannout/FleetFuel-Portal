@@ -4,7 +4,10 @@ namespace App\Models;
 
 use App\Enums\RateSource;
 use App\Models\Concerns\AppendOnly;
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Database\Factories\ExchangeRateFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -40,5 +43,33 @@ class ExchangeRate extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * The only pair the portal converts: LBP per USD.
+     *
+     * @param  Builder<static>  $query
+     */
+    public function scopeUsdLbp(Builder $query): void
+    {
+        $query->where('base', 'USD')->where('quote', 'LBP');
+    }
+
+    /**
+     * Rows that may convert an event at $at: effective_at <= T < expires_at.
+     *
+     * @param  Builder<static>  $query
+     */
+    public function scopeEligibleAt(Builder $query, CarbonInterface $at): void
+    {
+        // Bound as UTC text: DATETIME columns hold UTC (DECISIONS, M01).
+        $at = CarbonImmutable::instance($at)->utc();
+
+        $query->where('effective_at', '<=', $at)->where('expires_at', '>', $at);
+    }
+
+    public function isEligibleAt(CarbonInterface $at): bool
+    {
+        return $this->effective_at->lessThanOrEqualTo($at) && $this->expires_at->greaterThan($at);
     }
 }

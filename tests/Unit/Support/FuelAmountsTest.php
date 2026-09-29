@@ -53,6 +53,15 @@ class FuelAmountsTest extends TestCase
         ];
     }
 
+    public function test_the_indicative_usd_unit_price_has_four_decimals_rounded_half_up(): void
+    {
+        // 80000 / 89500 = 0.893854...
+        $this->assertSame('0.8939', FuelAmounts::indicativeUnitPriceUsd('80000.0000', '89500.00000000'));
+        // 0.5 / 10000 = 0.00005: exactly half at the fifth decimal place.
+        $this->assertSame('0.0001', FuelAmounts::indicativeUnitPriceUsd('0.5', '10000'));
+        $this->assertSame('0.0000', FuelAmounts::indicativeUnitPriceUsd('0.4999', '10000'));
+    }
+
     public function test_adding_amounts_is_exact_and_never_rounds_silently(): void
     {
         // With PHP floats 0.1 + 0.2 is 0.30000000000000004.

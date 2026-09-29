@@ -2,7 +2,7 @@
 
 A Laravel/MySQL portfolio application, in progress, for corporate fuel cards, station POS transactions, diesel deliveries, and USD/LBP reports. All companies, people and prices are fictional.
 
-**Current status: M03 fleet management done.** The Docker stack runs locally, with the constrained database schema and a deterministic demo seed. Sign-in, roles and company/station isolation work, and API tokens can be issued and revoked. Admins manage companies, stations and products; admins and managers manage vehicles, drivers and fuel cards, with audited quota and block controls. Pricing/FX, POS ingestion, deliveries and reports come in later milestones, and CI has not run on GitHub (there is no remote). See [docs/PROGRESS.md](docs/PROGRESS.md).
+**Current status: M04 prices and exchange rates done.** The Docker stack runs locally, with the constrained database schema and a deterministic demo seed. Sign-in, roles and company/station isolation work, and API tokens can be issued and revoked. Admins manage companies, stations and products; admins and managers manage vehicles, drivers and fuel cards, with audited quota and block controls. Admins publish LBP prices on an append-only timeline and monitor USD/LBP rates, which a daily `rates:sync` stores with bounded fallback and audited manual overrides. POS ingestion, deliveries and reports come in later milestones. See [docs/PROGRESS.md](docs/PROGRESS.md).
 
 Start with [START_HERE.md](START_HERE.md) to continue the build in Claude Code. It contains the milestone order and resume instructions.
 
@@ -65,6 +65,23 @@ Sign in as `admin@fleetfuel.test` or `manager.atlas@fleetfuel.test`; the navigat
   - Once a card has been used, its vehicle, driver and product restriction are locked.
   - Lowering a limit below this month's usage asks for confirmation.
 - Nothing is deleted: records are deactivated or archived, so the purchase history keeps pointing at them. An inactive company's fleet is read-only, except that cards can still be blocked or archived.
+
+## Prices and exchange rates
+
+- **Prices** (Products → Prices): each product has an append-only timeline in **LBP per liter**. An admin publishes a price that starts now or at a later Beirut time; published prices never change, and a correction is a newer price. Every role can read the timeline. The products list shows the current price and an indicative USD price.
+- **Exchange rates** (admin: Exchange rates): the USD/LBP rate in effect, the last sync result, recent observations and a manual override form. An override starts now or later, lasts at most 72 hours, needs a reason, and is audited.
+- A purchase at time T uses the latest price that started at or before T, and the latest valid manual override, otherwise the latest valid observation (each valid for 72 hours). With no valid rate, new purchases are refused rather than converted at a made-up rate.
+- `EXCHANGE_RATE_MODE` in `.env`:
+  - `fixture` (default) uses synthetic, fictional rates and never calls the provider;
+  - `live` fetches from [ExchangeRate-API](https://www.exchangerate-api.com)'s open endpoint and ignores fixture rates.
+- Sync: the `scheduler` container runs `rates:sync` daily at 01:00 UTC. To run it by hand:
+
+  ```bash
+  docker compose exec app php artisan rates:sync           # skips if the provider's next update is not due
+  docker compose exec app php artisan rates:sync --force   # fetch anyway
+  ```
+
+  In fixture mode it stores one synthetic observation per UTC day. In live mode it stores each provider observation once, retries timeouts and 5xx errors at most three times, and leaves stored rates untouched when the provider fails. Page requests never call the provider.
 
 ## Accounts and API tokens
 
