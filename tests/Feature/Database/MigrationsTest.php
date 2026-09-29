@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Database;
 
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
@@ -22,7 +23,8 @@ class MigrationsTest extends TestCase
         $this->assertTablesExist();
 
         $this->artisan('migrate:reset')->assertSuccessful();
-        $this->assertSame(['migrations'], Schema::getTableListing(schemaQualified: false));
+        // Only this database: the test user can also see fleetfuel_test_concurrency.
+        $this->assertSame(['migrations'], Schema::getTableListing(DB::getDatabaseName(), schemaQualified: false));
 
         $this->artisan('migrate')->assertSuccessful();
         $this->assertTablesExist();

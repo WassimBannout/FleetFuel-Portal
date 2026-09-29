@@ -2,14 +2,11 @@
 
 namespace Database\Seeders\Support;
 
-use App\Enums\CardStatus;
-use App\Enums\CompanyStatus;
 use App\Enums\DeliveryStatus;
-use App\Enums\RateMode;
 use App\Enums\RateSource;
 use App\Enums\UserRole;
+use App\Exceptions\PurchaseDeclined;
 use App\Models\AuditLog;
-use App\Models\CardMonthlyUsage;
 use App\Models\Company;
 use App\Models\DeliveryOrder;
 use App\Models\DeliveryStatusHistory;
@@ -19,34 +16,27 @@ use App\Models\FuelTransaction;
 use App\Models\Product;
 use App\Models\Station;
 use App\Models\User;
-use App\Services\PriceResolver;
-use App\Support\BusinessMonth;
-use App\Support\FuelAmounts;
-use App\Support\PosRequestHash;
-use Brick\Math\BigDecimal;
+use App\Services\FuelTransactionService;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use LogicException;
 
 /**
- * Writes historical demo/test data with the same rules live writes follow,
- * until the real services exist (card service M03, POS ingestion M05,
- * deliveries M07):
+ * Writes historical demo/test data with the same rules live writes follow:
  *
- * - A purchase locks the card row, then the monthly usage row, inserts one
- *   ledger row with price, rate and ownership snapshots and increments the
- *   counter exactly once, all in one database transaction.
- * - It refuses what the live service would decline (inactive card, wrong
- *   fuel, over quota), so fixtures never contain impossible history.
+ * - A purchase goes through FuelTransactionService::recordHistorical(), the
+ *   code POS ingestion uses: card lock, then the monthly usage row, one
+ *   ledger row with snapshots and exactly one counter increment. Anything
+ *   the live service would decline is refused here too, so fixtures never
+ *   contain impossible history. Only request-time rules (the 72-hour
+ *   window, replays) are skipped, because the purpose is to record the past.
  * - Quota changes, manual rate overrides and delivery transitions write
- *   their audit/history rows in the same transaction as the change.
- *
- * It deliberately skips request-time rules such as the 72-hour ingestion
- * window, because its purpose is to record the past.
+ *   their audit/history rows in the same transaction as the change (the
+ *   delivery service arrives in M07).
  */
 final class LedgerFixtureBuilder
 {
-    public function __construct(private readonly PriceResolver $prices) {}
+    public function __construct(private readonly FuelTransactionService $transactions) {}
 
     public function recordPurchase(
         FuelCard $card,
@@ -58,67 +48,19 @@ final class LedgerFixtureBuilder
         string $externalRef,
         ?int $odometerKm = null,
     ): FuelTransaction {
-        $transactedAt = $transactedAt->utc();
-        $liters = (string) BigDecimal::of($liters)->toScale(2);
+        if ($operator->role !== UserRole::StationOperator || $operator->station_id !== $station->id) {
+            throw new LogicException("Fixture purchase on {$card->card_no} refused: the recording user is not an operator of that station.");
+        }
 
-        return DB::transaction(function () use ($card, $station, $operator, $product, $liters, $transactedAt, $externalRef, $odometerKm): FuelTransaction {
-            // Lock order: card, then monthly usage, then insert the ledger row.
-            $card = FuelCard::query()
-                ->with(['company', 'vehicle', 'driver'])
-                ->lockForUpdate()
-                ->findOrFail($card->id);
-
-            $this->assertPurchaseAllowed($card, $station, $operator, $product);
-
-            // Demo history is synthetic, so it is priced in fixture mode
-            // whatever EXCHANGE_RATE_MODE says (live mode ignores fixtures).
-            $quote = $this->prices->quote($product, $liters, $transactedAt, RateMode::Fixture);
-            $price = $quote->price;
-            $rate = $quote->rate;
-            $amountLbp = $quote->amountLbp;
-            $amountUsd = $quote->amountUsd;
-            $quotaMonth = BusinessMonth::for($transactedAt);
-
-            $usage = $this->lockedUsage($card, $quotaMonth);
-            $this->assertWithinQuota($card, $usage, $liters, $amountUsd);
-
-            $externalRef = strtoupper($externalRef);
-
-            $transaction = FuelTransaction::query()->forceCreate([
-                'fuel_card_id' => $card->id,
-                'station_id' => $station->id,
-                'external_ref' => $externalRef,
-                'request_hash' => PosRequestHash::make(
-                    $station->id, $externalRef, $card->card_no, $product->code, $liters, $transactedAt, $odometerKm,
-                ),
-                'company_id' => $card->company_id,
-                'vehicle_id' => $card->vehicle_id,
-                'driver_id' => $card->driver_id,
-                'tank_capacity_l' => $card->vehicle?->tank_capacity_l,
-                'product_id' => $product->id,
-                'liters' => $liters,
-                'odometer_km' => $odometerKm,
-                'product_price_id' => $price->id,
-                'unit_price_lbp' => $price->price_lbp,
-                'amount_lbp' => $amountLbp,
-                'exchange_rate_id' => $rate->id,
-                'rate_lbp_per_usd' => $rate->rate,
-                'rate_source' => $rate->source,
-                'rate_effective_at' => $rate->effective_at,
-                'amount_usd' => $amountUsd,
-                'transacted_at' => $transactedAt,
-                'quota_month' => $quotaMonth,
-                'created_by' => $operator->id,
+        try {
+            return $this->transactions->recordHistorical(
+                $card, $station, $operator, $product, $liters, $transactedAt->utc(), $externalRef, $odometerKm,
                 // Received a minute after the pump event.
-                'created_at' => $transactedAt->addMinute(),
-            ]);
-
-            $usage->used_l = FuelAmounts::add($usage->used_l, $liters);
-            $usage->used_usd = FuelAmounts::add($usage->used_usd, $amountUsd);
-            $usage->save();
-
-            return $transaction;
-        });
+                $transactedAt->utc()->addMinute(),
+            );
+        } catch (PurchaseDeclined $e) {
+            throw new LogicException("Fixture purchase on {$card->card_no} refused ({$e->errorCode}): {$e->getMessage()}", 0, $e);
+        }
     }
 
     /**
@@ -283,65 +225,6 @@ final class LedgerFixtureBuilder
 
             return $order;
         });
-    }
-
-    private function assertPurchaseAllowed(FuelCard $card, Station $station, User $operator, Product $product): void
-    {
-        $refuse = fn (string $reason) => throw new LogicException("Fixture purchase on {$card->card_no} refused: {$reason}.");
-
-        if ($card->status !== CardStatus::Active) {
-            $refuse("card is {$card->status->value}");
-        }
-        if ($card->company->status !== CompanyStatus::Active) {
-            $refuse('company is inactive');
-        }
-        if (! $station->is_active) {
-            $refuse('station is inactive');
-        }
-        if ($operator->role !== UserRole::StationOperator || $operator->station_id !== $station->id) {
-            $refuse('the recording user is not an operator of that station');
-        }
-        if (! $product->is_active) {
-            $refuse('product is inactive');
-        }
-        if ($card->allowed_product_id !== null && $card->allowed_product_id !== $product->id) {
-            $refuse("card is restricted to another product than {$product->code}");
-        }
-        if ($card->vehicle !== null && ! $card->vehicle->is_active) {
-            $refuse('assigned vehicle is inactive');
-        }
-        if ($card->vehicle !== null && $card->vehicle->fuel_type !== $product->fuel_type) {
-            $refuse("vehicle takes {$card->vehicle->fuel_type->value}, not {$product->code}");
-        }
-        if ($card->driver !== null && ! $card->driver->is_active) {
-            $refuse('assigned driver is inactive');
-        }
-    }
-
-    private function assertWithinQuota(FuelCard $card, CardMonthlyUsage $usage, string $liters, string $amountUsd): void
-    {
-        if ($card->monthly_limit_l !== null && BigDecimal::of($usage->used_l)->plus($liters)->isGreaterThan($card->monthly_limit_l)) {
-            throw new LogicException("Fixture purchase on {$card->card_no} would exceed its liter quota.");
-        }
-
-        if ($card->monthly_limit_usd !== null && BigDecimal::of($usage->used_usd)->plus($amountUsd)->isGreaterThan($card->monthly_limit_usd)) {
-            throw new LogicException("Fixture purchase on {$card->card_no} would exceed its USD quota.");
-        }
-    }
-
-    private function lockedUsage(FuelCard $card, string $month): CardMonthlyUsage
-    {
-        $usage = CardMonthlyUsage::query()
-            ->where('fuel_card_id', $card->id)
-            ->where('month_start', $month)
-            ->lockForUpdate()
-            ->first();
-
-        // A freshly inserted row is already locked by this transaction.
-        return $usage ?? CardMonthlyUsage::query()->forceCreate([
-            'fuel_card_id' => $card->id,
-            'month_start' => $month,
-        ]);
     }
 
     /**

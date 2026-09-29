@@ -182,4 +182,36 @@ These are implementation defaults chosen to make the research actionable. They a
 - D22 attribution: "Rates By Exchange Rate API", linking to exchangerate-api.com, appears wherever a provider rate is shown: products list, timeline, the integration page in live mode, and purchase detail when its snapshot source is `provider`. Only USD/LBP is stored; the provider feed is not republished.
 - Tests: `Http::preventStrayRequests()` in `tests/TestCase.php`, so any unfaked outbound request fails a test. Retry pauses use Laravel's `Sleep`, faked in tests to assert the exact pauses.
 
+2026-09-29 (M05): POS ingestion within D04, D05, D07, D08, D13 and D15. No product rule changed. The API contract gained an "Implemented behavior (M05)" section; the points below fill in details the specs leave open.
+
+- One service, `FuelTransactionService`, records every accepted purchase:
+  - `ingest()` handles the POS API.
+  - `recordHistorical()` handles demo and test history, with the same checks, locks and snapshots. It skips only the request-time rules (72-hour window, replay) and always prices in fixture mode.
+  - `LedgerFixtureBuilder` now delegates to `recordHistorical()`. Its refusals keep the `LogicException` form and include the error code. Seeded history is unchanged: the seeder and builder tests pass as before.
+- Locks (D05):
+  - Order: card row `FOR UPDATE`, then this month's counter row `FOR UPDATE`, then the ledger insert.
+  - The counter row is created on a card's first purchase of the month after a plain existence check. Only the holder of the card lock can create it, so the check is safe, and no gap lock is taken. (`SELECT … FOR UPDATE` on a missing row would take one and could deadlock with another card's first purchase.)
+  - The in-transaction replay recheck is the transaction's first plain read, made after the card lock is granted. Under MySQL's REPEATABLE READ the snapshot starts at that read, so it sees an identical request that committed while this one waited.
+  - It deliberately does not use `FOR UPDATE` on the missing `(station_id, external_ref)` key. That gap lock would turn the different-card race into a deadlock instead of a unique-index decision.
+- D04, the unique index as the final arbiter:
+  - A `UniqueConstraintViolationException` on insert rolls the transaction back. A fresh read then finds the winner: equal hash gives 200, a different hash 409.
+  - Deadlocks and lock timeouts (Laravel's concurrency-error detector) are retried with the whole transaction, 3 attempts in total, pausing 20–60 ms × attempt.
+  - When attempts run out, the answer is 503 `temporarily_unavailable` with `Retry-After: 1`.
+  - The mutation check showed the recheck is defense in depth: without it, identical concurrent retries still end as one 201 and one 200, through the unique index.
+- Step 1 order: an inactive station is refused in the Form Request's `authorize()` (403 `station_inactive`), so before structural validation, as docs/04 lists.
+- Window (D08): both ends are inclusive, and an event even one second after "now" is refused. There is no clock-skew allowance, following docs/04 literally; M06's simulator sends the current time.
+- Counter bounds: an increment that would overflow `used_l` DECIMAL(14,2) or `used_usd` DECIMAL(20,2) is a 422 before anything is written, like the amount bounds in `PriceResolver::quote()`.
+- Balance endpoint:
+  - A station operator may look up any card, because a card works at every station (new `FuelCardPolicy::viewBalance`).
+  - A manager only finds their company's cards (404 otherwise), and admins find all.
+  - Figures always use current limits, and the response has no customer data.
+- Transaction list: `from`/`to` must come together, unknown query parameters are 422, and the response is built explicitly so `meta` has exactly the OpenAPI keys (Laravel's default paginator adds others).
+- Rate limit: `throttle:pos-writes`, 60 per minute keyed by station, so one station's operators share it.
+- `php artisan usage:reconcile` wraps the M01 `UsageReconciliation`. It is read-only, exits 1 when any counter differs, and prints card IDs, never card numbers.
+- Concurrency tests (T20–T22), in the new "Concurrency" PHPUnit suite:
+  - Each request runs in a separate PHP process (`tests/Concurrency/pos-worker.php`, through the real HTTP kernel or `FuelCardService`), with its own MySQL connection to a dedicated database, `fleetfuel_test_concurrency`. It is created and migrated on first use, then emptied before each test.
+  - Barrier: the test holds the contested row lock, waits until `SHOW FULL PROCESSLIST` lists every worker waiting (Laravel's prepared statements show as `Execute`), then releases it. Ordered cases run one side inside the test's own open transaction.
+  - Every wait is bounded (20 s), and workers are stopped in `tearDown`.
+- Laravel 12+ `Schema::getTableListing()` lists every schema the MySQL user can see. `MigrationsTest` and the concurrency cleanup now pass the current database explicitly; the second test database had exposed this.
+
 Template: date, affected decision, old/new behavior, reason, spec/test updates, migration implications.

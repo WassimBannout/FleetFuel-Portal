@@ -130,16 +130,51 @@ Response first creation: 201, `Location: /api/v1/transactions/1`. Same key and e
 
 Choose and document actual limits in M02/M05 (default login/token issuance 5/minute per email+IP, authenticated API 120/minute per user, POS writes 60/minute per station). Test exact configured thresholds without waiting in real time. Error rendering must preserve Retry-After and framework authentication headers.
 
-Limits implemented in M02 (tested with time travel, not real waiting):
+Limits implemented in M02 and M05 (tested with time travel, not real waiting):
 
 | Surface | Limit | Counted | Over the limit |
 | --- | --- | --- | --- |
 | Web sign-in (`POST /login`) | 5 per minute per lowercase email + IP | Failed attempts only; a successful sign-in clears the count | Form error "Too many login attempts…" for about 60 s, even with the right password |
 | `POST /api/v1/auth/token` | 5 per minute per lowercase email + IP | Every request | 429 `rate_limited` with `Retry-After` |
 | Authenticated `/api/v1` requests | 120 per minute per user | Every request | 429 `rate_limited` with `Retry-After` |
-| POS writes | 60 per minute per station | M05 | M05 |
+| `POST /api/v1/transactions` | 60 per minute per station (all its operators and tokens together), on top of the 120 per user | Every request | 429 `rate_limited` with `Retry-After` |
 
 Every response carries a server-generated `X-Request-Id` (a client-supplied value is ignored). The same value is `error.request_id` in the envelope and is attached to server log entries. Unknown `/api/*` paths and methods also use the envelope, whatever the `Accept` header. Unrecognized request fields are `validation_failed` (for example `abilities` or `role` on token issuance), not silently ignored.
+
+## Implemented behavior (M05)
+
+`POST /transactions`, `GET /transactions`, `GET /transactions/{id}` and `GET /cards/{card_no}/balance` are live. Details the tables above leave open:
+
+- **Check order for POS requests.** Each step answers before the next runs:
+  1. Token, role (`station_operator`) and ability (`transactions:create`): 401/403. Then an inactive station: 403 `station_inactive`.
+  2. Structure (types, formats, scale, unknown fields such as `station_id`): 422.
+  3. Replay lookup on `(station_id, external_ref)`: 200 with the original data, or 409.
+  4. Unknown card: 404.
+  5. The 72-hour window, both ends inclusive; an event after "now" is refused, with no clock-skew allowance: 422.
+  6. Card, company, assignment and product rules: 403.
+  7. Price: 422 `price_unavailable`. Rate: 503 `rate_unavailable`.
+  8. Quota: 403 `quota_exceeded`.
+
+  A replay therefore succeeds after a block, a price change, a quota cut or the event ageing past 72 hours.
+- **Decline details.**
+  - `quota_exceeded`: `{"dimension": "liters" | "usd"}`.
+  - `assignment_inactive`: `{"assignment": "vehicle" | "driver"}`.
+  - `product_not_allowed`: `{"reason": "product_inactive" | "card_restriction" | "vehicle_fuel_type"}`.
+  - `card_inactive` means an archived card; `card_blocked` a blocked one.
+- **Input formats.**
+  - `product_code` must be one of the exact upper-case codes.
+  - `external_ref` and `card_no` accept any letter case and are stored in capitals.
+  - `odometer_km` must be a JSON integer or null; a numeric string is refused.
+- **Contention.** Deadlocks, lock timeouts and an unresolved same-reference race are retried up to 3 times. After that the answer is 503 `temporarily_unavailable` with `Retry-After: 1`, and nothing is recorded.
+- **Transaction list.**
+  - `from` and `to` come together or not at all; without them, the list covers the current Beirut month.
+  - Unknown query parameters are 422.
+  - An operator's `station_id` filter still applies inside their own station, so another station returns an empty list.
+  - `meta.totals` covers every filtered row, not just the page.
+- **Balance.**
+  - An admin looks up any card, a manager only their company's cards (another company's is 404), and a station operator any card, because cards work at every station.
+  - The figures always use the card's **current** limits, also for the previous month.
+  - The response names no company, vehicle or driver, and reserves nothing.
 
 ## CSV contract
 

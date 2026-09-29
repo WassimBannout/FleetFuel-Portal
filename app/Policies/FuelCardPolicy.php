@@ -26,6 +26,16 @@ class FuelCardPolicy
     }
 
     /**
+     * The POS balance lookup (GET /api/v1/cards/{card_no}/balance): the card
+     * owner's admin or manager, or any station operator, since a card can be
+     * used at every station. The response names no company, vehicle or driver.
+     */
+    public function viewBalance(User $user, FuelCard $card): bool
+    {
+        return $this->view($user, $card) || $user->isStationOperator();
+    }
+
+    /**
      * Quota and block/unblock changes. Station operators never change
      * cards. (M03 adds the card lock and audit around these writes.)
      */

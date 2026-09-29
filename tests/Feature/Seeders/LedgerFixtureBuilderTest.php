@@ -71,7 +71,7 @@ class LedgerFixtureBuilderTest extends TestCase
         $this->purchase('60.00');
         $this->purchase('40.00', 'POS-TEST-0002');
 
-        $this->assertRefused(fn () => $this->purchase('0.01', 'POS-TEST-0003'), 'liter quota');
+        $this->assertRefused(fn () => $this->purchase('0.01', 'POS-TEST-0003'), 'quota_exceeded');
 
         $this->assertSame('100.00', CardMonthlyUsage::query()->sole()->used_l);
         $this->assertSame(2, FuelTransaction::query()->count());
@@ -102,7 +102,7 @@ class LedgerFixtureBuilderTest extends TestCase
             'inactive station' => ['inactive station', 'station is inactive'],
             'operator of another station' => ['other operator', 'not an operator of that station'],
             'product outside the card restriction' => ['restricted product', 'restricted to another product'],
-            'petrol into a diesel vehicle' => ['wrong fuel', 'vehicle takes diesel'],
+            'petrol into a diesel vehicle' => ['wrong fuel', "vehicle's fuel type"],
         ];
     }
 

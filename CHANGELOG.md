@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- M05 POS transactions and atomic quotas:
+  - `POST /api/v1/transactions`, for station operators only (with the `transactions:create` token ability):
+    - 201 for a new purchase, 200 with `Idempotency-Replayed: true` for an identical retry, and 409 for a changed purchase under the same station reference;
+    - the station always comes from the account;
+    - 60 requests per minute per station.
+  - `FuelTransactionService`:
+    - card lock, then the monthly counter lock;
+    - price and rate for the event time, with immutable snapshots;
+    - Beirut quota months, and exact liter and USD limits;
+    - the 72-hour window for new events only;
+    - the unique `(station_id, external_ref)` index as the final judge of races;
+    - bounded retries, then 503 `temporarily_unavailable`.
+    - Demo history is recorded through the same service.
+  - `GET /api/v1/transactions` (scoped, filtered, paginated, with totals for the whole filter), `GET /api/v1/transactions/{id}`, and `GET /api/v1/cards/{card_no}/balance` (current limits, no customer data).
+  - `php artisan usage:reconcile`: a read-only check of every monthly counter against the ledger.
+  - A Concurrency test suite: real overlapping PHP processes on a dedicated MySQL database. It shows no double spend, one purchase per repeated request, and serialization with card edits.
 - M04 prices and exchange rates:
   - `PriceResolver`: the price and USD/LBP rate in effect at an instant, with a valid manual override first, then provider (live mode) or fixture (fixture mode) observations. `price_unavailable` (422) and `rate_unavailable` (503) instead of a zero or 1:1 value. Rounded purchase amounts are checked against their column bounds.
   - `ExchangeRateProvider` with an HTTP implementation for ExchangeRate-API's open endpoint:

@@ -4,31 +4,43 @@ Updated: 2026-09-29
 
 ## Current state
 
-- **M04 Prices and exchange rates is DONE and verified locally on MySQL 8.4**, on top of M00–M03.
-  - `PriceResolver` picks the price and USD/LBP rate in effect at an instant: a valid manual override first, then provider (live mode) or fixture (fixture mode) observations.
-  - `rates:sync` fetches through `ExchangeRateProvider` (HTTP or fixture) with bounded retries, the provider's next-update hint, per-mode sync state and no overlap. It runs daily at 01:00 UTC.
-  - Admins publish audited, append-only LBP prices. Every role reads the price timeline.
-  - The admin integration-status page shows the rate in effect, degradation and recent observations, and takes audited manual overrides (at most 72 hours, never retroactive).
-- Dev database: the M01 demo plus the M03 walkthrough records, plus from M04:
-  - the migration `2026_09_29_120001` (additive column);
-  - one fixture observation for 2026-09-29 (from a fixture-mode `rates:sync`);
-  - one **real provider observation** from the single labeled live run (89500.00000000 LBP per USD, effective 2026-09-29T00:02:31Z, expires 2026-10-02T00:02:31Z);
-  - the two `integration_sync_states` rows.
+- **M05 POS transactions and atomic quotas is DONE and verified locally on MySQL 8.4**, on top of M00–M04.
+  - `POST /api/v1/transactions` (station operators, `transactions:create`):
+    - replay 200, conflict 409 and created 201 on the unique `(station_id, external_ref)` key;
+    - the station always comes from the account;
+    - card lock, then the monthly counter lock;
+    - immutable price, rate and ownership snapshots, Beirut quota months, exact limits;
+    - the 72-hour window for new events only;
+    - bounded contention retries.
+  - Also live: `GET /api/v1/transactions` (scoped, filtered, paginated, whole-filter totals), `GET /api/v1/transactions/{id}` and `GET /api/v1/cards/{card_no}/balance`.
+  - `php artisan usage:reconcile` is a read-only check of counters against the ledger.
+- Dev database: the M01 demo, the M03 walkthrough records and the M04 rate rows, plus from M05:
+  - one purchase from the live walkthrough: transaction 33, `WALK-M05-001`, 20 L on `FF-ATLAS-H01` at Harbor Demo Station (now 190 of 400 L used this month);
+  - one API token, issued for the walkthrough and then revoked.
 
-  Fixture mode ignores the provider row. No price or override was written to the dev database.
-- Not built yet: POS ingestion, deliveries and reports (M05+). The only API endpoints are `POST`/`DELETE /api/v1/auth/token`.
-- Local URL: <http://localhost:8080> (sign-in `/login`, readiness `/health`, liveness `/up`, exchange rates `/integrations/exchange-rates`).
+  The POS-simulator cards (`FF-ATLAS-001`, `FF-ATLAS-BLOCKED`, `FF-ATLAS-TINY`, `FF-CEDAR-001`) are still unused. `usage:reconcile` reports every counter matching.
+- The test MySQL server now also holds `fleetfuel_test_concurrency`, created by the Concurrency suite. It is covered by the existing test-user grant (`fleetfuel\_test%`).
+- Not built yet: the POS simulator, the other API endpoints and OpenAPI/Postman parity (M06), deliveries (M07), and reports (M08).
+- Local URL: <http://localhost:8080> (sign-in `/login`, readiness `/health`, liveness `/up`, API base `/api/v1`).
 - Git: branch `main` tracks `origin/main` (github.com/WassimBannout/FleetFuel-Portal).
-  - M00–M03 were committed by the user as `86287bb` and pushed. GitHub Actions run 36551839506 passed on it: Pint PASS on 183 files, Larastan OK, 254 tests / 2375 assertions, npm 0 vulnerabilities, Vite build OK, and the repeated-setup step passed.
-  - M04 is committed and pushed in the commit that contains this file. Its CI result had not been observed when this file was written.
+  - M04 is `6922807`. GitHub Actions run 36596673138 passed on it: Pint PASS on 211 files, Larastan OK, 349 tests / 2800 assertions, npm 0 vulnerabilities, Vite build OK, and the repeated-setup step passed.
+  - M05 is committed and pushed in the commit that contains this file. Its CI result had not been observed when this file was written.
 
 ## Next action
 
-Execute `prompts/05-pos-transactions.md` (M05): FuelTransactionService, canonical request hashing, station-derived scope, card and usage locks, the unique `(station_id, external_ref)` key, snapshots and replay semantics. Starting points from M04:
+Execute `prompts/06-api-tooling.md` (M06):
+- the reference endpoints (`GET /stations`, `GET /products/prices`);
+- `PATCH /cards/{id}`;
+- vehicle and driver `GET`/`POST`;
+- the standalone `tools/pos-simulator`;
+- OpenAPI and Postman validated against real responses (T24/T25).
 
-- Price a purchase with `PriceResolver::quote($product, $liters, $transactedAt)`. It returns the price row, rate row and rounded `amountLbp`/`amountUsd`, and throws `PriceUnavailable` (422), `RateUnavailable` (503) or a liters/overflow `ValidationException` (422). Call it inside the card lock; it only reads the database.
-- Replace `LedgerFixtureBuilder::recordPurchase()` internals with the new service, or have both share it, as the M01 record says.
-- Replay must be checked before price/rate resolution (docs/04-BUSINESS-RULES.md step 3), so an expired rate cannot block a valid replay (T15).
+Starting points from M05:
+
+- **Price preview:** `GET /products/prices?at=` can reuse `PriceResolver::findPrice()`/`findRate()` and `FuelAmounts::indicativeUnitPriceUsd()`.
+- **Card patch:** `PATCH /cards/{id}` must call `FuelCardService::updateLimits(..., allowBelowUsage: true)` and `changeStatus()`. Those already take the card lock, which the Concurrency suite shows serializing with ingestion. Declare `role:admin,company_manager` + `abilities:cards:write` on the route.
+- **Simulator scenarios:** the simulator cards are still fresh in the dev database. Postman and the simulator should generate a new `external_ref` and the current time for each new scenario, and reuse the saved payload for replay and conflict (docs/08-BUILD-PLAN.md).
+- **OpenAPI parity:** the list response is built explicitly to the OpenAPI `PageMeta` keys. Check that `openapi.json` and the real responses agree, including the decline `details` documented in docs/05 "Implemented behavior (M05)".
 
 ## Milestone ledger
 
@@ -39,7 +51,7 @@ Execute `prompts/05-pos-transactions.md` (M05): FuelTransactionService, canonica
 | M02 Auth/security | DONE | T03, and T04–T06 for the implemented surfaces, on MySQL: two-company and two-station tests on real routes, manager A denied B's data (404), wrong role denied (403), revoked/expired/disabled tokens rejected (401), CSRF tested with the real middleware. `make verify`: 194 tests, 1933 assertions. T05 write routes (quotas, prices) are policy-level until M03/M04 wire them to screens |
 | M03 Fleet CRUD | DONE | T04/T05/T07/T08 on real routes (MySQL): cross-company vehicle/driver IDs refused, card company immutable, used-card assignment locked, quota/block/deactivation audits with before/after values, operators 403, managers 404 on other companies' records, no delete routes (405), input escaped. Company → vehicle/driver → card and a blocked card walked through live. `make verify`: 254 tests, 2375 assertions |
 | M04 Pricing/FX | DONE | T09–T12 (ledger-immutability part of T10/T12 completes in M05) on MySQL with faked HTTP: exact 20 L sample (1600000.00 LBP / 17.88 USD), half-up edges, overflow/excess-scale inputs, exact price boundary, missing price 422, manual > provider/fixture precedence, expired/missing rate 503, live ignores fixtures, success/schema/timeout/5xx/429 with bounded attempts, deduplicated observations. One live sync run, labeled. `make verify`: 349 tests, 2800 assertions |
-| M05 POS ingestion | TODO | Depends on M04 |
+| M05 POS ingestion | DONE | On MySQL through the real HTTP stack: T13–T19, T23 and the ledger parts of T10/T12. T20–T22 use genuinely overlapping PHP processes, each with its own connection, on a dedicated database: no double spend at the quota edge (80 + 15 + 15 of 100 L; 6 × 20 L of 100 L), one purchase per identical concurrent retry, one winner + 409 for a conflicting or cross-card shared reference (settled by the unique index), and card edits serialized with ingestion in both orders. Live walkthrough through nginx. `make verify`: 441 tests, 3355 assertions |
 | M06 API/tooling | TODO | Depends on M05 |
 | M07 Deliveries | TODO | Depends on M06 |
 | M08 Reporting | TODO | Depends on M07 |
@@ -50,7 +62,102 @@ Execute `prompts/05-pos-transactions.md` (M05): FuelTransactionService, canonica
 
 Use TODO / IN PROGRESS / DONE / BLOCKED. A milestone is DONE only when its checks pass. If an external prerequisite blocks one part, record exactly which part and finish independent local work.
 
-## Most recent session: M04
+## Most recent session: M05
+
+**Date / milestone:** 2026-09-29, M05 POS transactions and atomic quotas.
+
+**Goal and actual state:**
+- Goal: the complete ingestion algorithm (station-derived scope, canonical replay hashing, card and counter locks, snapshot amounts, bounded unique-race and deadlock handling), the balance, read-only reconciliation, and real overlapping MySQL workers, including a shared reference on different cards.
+- Result: done, and all local gates pass on MySQL.
+- M04 had nothing outstanding: the tree was clean and GitHub CI passed on `6922807`.
+
+### What was built
+
+- **Service:** `App\Services\FuelTransactionService`.
+  - `ingest()` covers steps 3–9: early replay lookup; card `FOR UPDATE`; replay recheck under the lock; the window; card, company, assignment and product checks; `PriceResolver::quote()`; the Beirut quota month; counter row created if missing, then `FOR UPDATE`; the quota check; ledger insert with snapshots; one counter increment.
+  - Around that, 3 whole-transaction attempts for deadlocks and lock timeouts, and resolution of a unique-index race by a fresh read (200 or 409). After that, `TemporarilyUnavailable` (503).
+  - `recordHistorical()` does the same for seeded history, with no window or replay and in fixture mode.
+- **Supporting classes:**
+  - `App\Support\PosPurchase` (canonical input and hash) and `IngestResult`.
+  - `App\Exceptions\PurchaseDeclined` (station_inactive, not_found, card_blocked, card_inactive, company_inactive, assignment_inactive, product_not_allowed, quota_exceeded, with details), `IdempotencyConflict` and `TemporarilyUnavailable`.
+  - `App\Rules\OffsetTimestamp`: an explicit offset, whole seconds and a real date.
+- **API:**
+  - `Api\V1\TransactionController` (store, index, show) and `Api\V1\CardBalanceController`.
+  - `Api\V1\StorePosTransactionRequest` (unknown fields refused; inactive station 403 in `authorize()`), `ListTransactionsRequest` and `CardBalanceRequest`.
+  - `App\Http\Resources\TransactionResource`.
+  - `FuelCardPolicy::viewBalance`, the `pos-writes` rate limiter, and four routes in `routes/api.php`.
+- **Command:** `usage:reconcile` (`app/Console/Commands/ReconcileUsage.php`).
+- **Refactor:** `LedgerFixtureBuilder::recordPurchase()` delegates to `recordHistorical()`; its own purchase checks, quota check and counter locking were removed.
+- **Station home:** a working purchase example and the balance lookup replace "not available yet".
+- **Tests (92 new):**
+  - `tests/Feature/Pos/{PosIngestionTest 62, TransactionReadApiTest 18}`.
+  - `tests/Concurrency/PosConcurrencyTest` (12) with the worker `tests/Concurrency/pos-worker.php`, in the new "Concurrency" suite in `phpunit.xml`.
+  - `tests/Concerns/SubmitsPosRequests`.
+  - `LedgerFixtureBuilderTest`: two refusal texts now expect the service's code or message.
+  - `MigrationsTest`: the table listing is scoped to the current database.
+- **Docs:** `docs/05-API-CONTRACT.md` (POS rate limit, "Implemented behavior (M05)"), `docs/DECISIONS.md` (M05 record), README ("POS purchases (API)", status, `make test`), CHANGELOG.
+
+### Checks: exact command and actual outcome
+
+| Command | Outcome |
+| --- | --- |
+| `git status`, `gh run list` at the start | Clean tree on `main`, up to date with `origin/main`. Run 36596673138 (M04, `6922807`) `success` |
+| MySQL probe with the mysql CLI: one session holds `FOR UPDATE`, a second waits, a third runs `SHOW FULL PROCESSLIST` | The waiting session is visible to the same user, with its statement in `Info`. That is the basis of the test barrier |
+| Seeder, builder, schema and append-only suites after the builder delegated to the service | 61 passed / 762 assertions, so seeded history is unchanged |
+| `make analyse`; `route:list --path=api` | `[OK] No errors`; 6 API routes (4 new) |
+| `PosIngestionTest` (first run) | **1 failed, 61 passed**, a test mistake: after `travel(4)->days()` the default payload's "one hour ago" had moved, so 409 was correct. The test now reuses the original payload. Then 62 passed / 398 assertions |
+| `TransactionReadApiTest` (first run) | 18 passed / 110 assertions |
+| Concurrency suite, run 1 | Fatal: my helper `result()` overrode PHPUnit's final `TestCase::result()`; renamed |
+| Concurrency suite, run 2 | **11 failed**, each after the 20 s wait: my filter matched `Command = 'Query'`, but Laravel's server-side prepared statements are listed as `Execute` (the CLI probe had used plain queries). Then **11 passed / 42 assertions** (63.11 s) |
+| `make verify` #1 | **exit 2 at analyse**: 4 Larastan errors in tests (`TestResponse` generics ×3, an unhandled `match` value). Fixed |
+| `make verify` #2 | **exit 2 at lint**: 1 import-order issue; Pint fixed it |
+| `make verify` #3 | **exit 2 at test: 240 failed, 200 passed.** Cause: in Laravel 12+, `Schema::getTableListing()` lists every schema the MySQL user can see, and `fleetfuel_test_concurrency` now existed. `MigrationsTest` rolled back, failed its "only `migrations` left" check, never re-migrated, and every later test found no tables. Fixed by scoping the listing to the current database (also in the concurrency cleanup) |
+| `make verify` #4 | exit 0: Pint PASS on 230 files, Larastan OK, **440 tests / 3350 assertions** (382.35 s), 0 vulnerabilities, Vite build OK. The duration is the host: load average about 5 and 29 % iowait from other applications. The same M04 suite took 55.5 s instead of 11.8 s |
+| New ordered T20 test (a purchase behind an in-flight purchase on the same card) | 1 passed |
+| Negative checks (file mutated, suite run, restored and checksum-verified) | Changed payload treated as a replay → 6 failed. Exact liter limit refused → 2 failed. UTC month instead of Beirut → 2 failed. Window removed → 2 failed. Inactive station accepted → 1 failed. **Card lock removed** → the block-first test fails (a stale "active" status is used); the ordered T20 test still passes, because the counter lock alone prevents overspending. **Card and counter locks removed** → the ordered T20 test fails with "201 is identical to 403": a real lost update and double spend. Unique-violation handling removed → 2 failed (500 instead of 409). In-lock recheck removed → still passes: the unique index decides anyway (defense in depth; reported, not a gap) |
+| `make verify` #5, the committed tree | exit 0: Pint PASS on 230 files, Larastan OK, **441 tests / 3355 assertions** (338.98 s on the loaded host), 0 vulnerabilities, Vite build OK |
+| `sh docker/bin/check-setup-preserves-state.sh` | PASS: "Nothing to migrate", demo "nothing changed", env files and APP_KEY kept |
+| Live walkthrough through nginx (curl; token requested with the password from `.env`, never printed) | Operator token issued. New purchase on `FF-ATLAS-H01` → 201 (id 33, 1600000.00 LBP / 17.88 USD, fixture rate, month 2026-09-01, `Location`). The same purchase with a UTC time, `"20"` and a lowercase reference → 200 `Idempotency-Replayed: true`, same id. 25 L under the same reference → 409 `idempotency_conflict`. `FF-ATLAS-BLOCKED` → 403 `card_blocked`. Payload `station_id` → 422 "This field is not allowed." Balance → 190.00 L used, 210.00 remaining. Detail → 200. Revoke → 204, then the POST → 401. `usage:reconcile` → "All monthly usage counters match the ledger." (exit 0) |
+
+### Not run or not verified
+
+- GitHub CI for the M05 commit (reported in the session reply after the push).
+- The POS simulator, the Postman collection and OpenAPI validation against real responses (M06, T24/T25).
+- The 503 `temporarily_unavailable` path: no deadlock or lock timeout was provoked, so the retry and the exhausted-attempts answer are untested. Covered: unique-index races resolve to 200/409 (Concurrency suite), and a failure that is not a concurrency error propagates and rolls everything back (T23 forced failure → 500).
+- The API card patch (M06); edits here go through `FuelCardService`, which the concurrency tests cover.
+- SQL Server (S01).
+
+### Decisions and deviations
+
+All are in `docs/DECISIONS.md` (2026-09-29, M05):
+
+- one service for API and history;
+- lock order, and the counter row created without a gap lock;
+- the plain-read recheck after the card lock (REPEATABLE READ);
+- the unique index as the final judge, with bounded retries and 503;
+- the inactive station refused before validation;
+- no clock-skew allowance;
+- counter overflow returns 422;
+- operators may look up any card's balance;
+- the list's exact `meta` keys;
+- the per-station rate limit;
+- the concurrency harness;
+- the Laravel 12+ schema-listing fix.
+
+No product rule changed.
+
+### Remaining work and blockers
+
+None for M05. Deliberately later: the simulator, Postman, the other API endpoints and OpenAPI parity (M06); the transaction screens with filters (M08/M09).
+
+**Suggested commit message:** `feat: ingest idempotent POS transactions with atomic quotas`.
+
+**One concept to explain:** the lost-update race, and why locks and the unique index solve different problems.
+- **Lost update:** two stations read "80 L used" at the same moment, each adds 15 L, and each writes 95. The card is at 110 L while the counter says 95. Locking the card row first makes the second purchase wait and then read 95, so it is refused. The mutation check reproduced exactly this double spend with the locks removed.
+- **Duplicate retries:** a POS that times out and resends the same purchase must not spend twice. The same reference can even arrive for two different cards, which no card lock serializes. The unique `(station_id, external_ref)` index lets exactly one row exist. The loser rereads the winner and answers 200 (identical) or 409 (different).
+- So the locks protect the quota arithmetic, and the index protects "one purchase per POS reference".
+
+## Earlier session: M04
 
 **Date / milestone:** 2026-09-29, M04 Prices and external FX.
 

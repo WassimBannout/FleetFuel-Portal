@@ -30,9 +30,18 @@
 <pre class="bg-body border rounded p-3 small"><code>curl -X POST {{ url('/api/v1/auth/token') }} \
   -H 'Accept: application/json' -H 'Content-Type: application/json' \
   -d '{"email": "{{ $user->email }}", "password": "YOUR-PASSWORD", "device_name": "pos-terminal-1"}'</code></pre>
+    <p>
+        Send each purchase with the token. The station is always yours; a unique <code>external_ref</code>
+        per purchase makes a retry safe (an identical retry returns the original purchase instead of charging twice).
+        Liters are a decimal string and the time must carry its UTC offset:
+    </p>
+<pre class="bg-body border rounded p-3 small"><code>curl -X POST {{ url('/api/v1/transactions') }} \
+  -H 'Accept: application/json' -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer YOUR-TOKEN' \
+  -d '{"external_ref": "POS-0001", "card_no": "FF-ATLAS-001", "product_code": "DIESEL",
+       "liters": "20.00", "transacted_at": "{{ now()->setTimezone(config('fleetfuel.business_timezone'))->format('Y-m-d\TH:i:sP') }}"}'</code></pre>
     <p class="mb-0">
-        Revoke it with <code>DELETE /api/v1/auth/token</code>, sending the token as
-        <code>Authorization: Bearer …</code>. Purchase submission (<code>POST /api/v1/transactions</code>)
-        is not available yet.
+        Check a card before fuelling with <code>GET /api/v1/cards/{card_no}/balance</code>. Revoke the token with
+        <code>DELETE /api/v1/auth/token</code>, sending it as <code>Authorization: Bearer …</code>.
     </p>
 @endsection

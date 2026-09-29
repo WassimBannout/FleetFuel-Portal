@@ -2,7 +2,7 @@
 
 A Laravel/MySQL portfolio application, in progress, for corporate fuel cards, station POS transactions, diesel deliveries, and USD/LBP reports. All companies, people and prices are fictional.
 
-**Current status: M04 prices and exchange rates done.** The Docker stack runs locally, with the constrained database schema and a deterministic demo seed. Sign-in, roles and company/station isolation work, and API tokens can be issued and revoked. Admins manage companies, stations and products; admins and managers manage vehicles, drivers and fuel cards, with audited quota and block controls. Admins publish LBP prices on an append-only timeline and monitor USD/LBP rates, which a daily `rates:sync` stores with bounded fallback and audited manual overrides. POS ingestion, deliveries and reports come in later milestones. See [docs/PROGRESS.md](docs/PROGRESS.md).
+**Current status: M05 POS transactions done.** The Docker stack runs locally, with the constrained database schema and a deterministic demo seed. Sign-in, roles and company/station isolation work, and API tokens can be issued and revoked. Admins manage companies, stations and products; admins and managers manage vehicles, drivers and fuel cards, with audited quota and block controls. Admins publish LBP prices on an append-only timeline and monitor USD/LBP rates, which a daily `rates:sync` stores with bounded fallback and audited manual overrides. Stations submit fuel purchases through the API, where retries are safe and quotas hold under concurrent use. The POS simulator, deliveries and reports come in later milestones. See [docs/PROGRESS.md](docs/PROGRESS.md).
 
 Start with [START_HERE.md](START_HERE.md) to continue the build in Claude Code. It contains the milestone order and resume instructions.
 
@@ -20,7 +20,7 @@ Then open <http://localhost:8080>. Readiness (app + database) is at `/health`; l
 | --- | --- |
 | `make setup` | Create `.env`/`.env.testing` only if absent (with generated local DB passwords), build the PHP image, install locked dependencies, create keys only if missing, migrate, seed an empty database, build assets, start the stack |
 | `make up` / `make down` | Start or stop the stack; `down` keeps the MySQL volume |
-| `make test` | PHPUnit against the separate `fleetfuel_test` MySQL database |
+| `make test` | PHPUnit against the separate `fleetfuel_test` MySQL database, plus the concurrency suite on `fleetfuel_test_concurrency` (overlapping PHP processes) |
 | `make lint` / `make analyse` | Pint style check / Larastan (PHPStan level 6) |
 | `make build` | `npm ci` and a production Vite build |
 | `make verify` | lint, analyse, test and build; stops at the first failure |
@@ -82,6 +82,29 @@ Sign in as `admin@fleetfuel.test` or `manager.atlas@fleetfuel.test`; the navigat
   ```
 
   In fixture mode it stores one synthetic observation per UTC day. In live mode it stores each provider observation once, retries timeouts and 5xx errors at most three times, and leaves stored rates untouched when the provider fails. Page requests never call the provider.
+
+## POS purchases (API)
+
+A station's point-of-sale sends each fuel purchase with a station operator's token. Get a token first (see "Accounts and API tokens" below), then:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/transactions \
+  -H 'Accept: application/json' -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"external_ref": "POS-0001", "card_no": "FF-ATLAS-001", "product_code": "DIESEL",
+       "liters": "20.00", "transacted_at": "2026-09-29T10:00:00+03:00", "odometer_km": 45000}'
+```
+
+- **201**: a new purchase, with a `Location` header. It stores the price, exchange rate, amounts and ownership as they were at `transacted_at`.
+- **200** with `Idempotency-Replayed: true`: the same request again (JSON key order, `"20"` vs `"20.00"` and the time zone notation do not matter). Nothing is charged twice.
+- **409**: the same `external_ref` from this station with a different purchase.
+- **403**: a business decline, such as a blocked card, the wrong fuel, or a quota exceeded (the details say which).
+- **422**: an invalid request, or an event time outside the last 72 hours.
+- The station always comes from the token; sending `station_id` is refused. Liters are a decimal string, and the time must include its UTC offset.
+- A card's quotas cannot be overspent even when several stations submit at the same moment: each purchase locks the card row first.
+- `GET /api/v1/transactions` lists purchases within your scope (filters `from`/`to` as Beirut dates, `card`, `station_id`, `product_code`, admin-only `company_id`), with totals for the whole filter.
+- `GET /api/v1/cards/{card_no}/balance?month=YYYY-MM` shows usage and what remains under the card's current limits.
+- `docker compose exec app php artisan usage:reconcile` compares every monthly counter with the ledger. It changes nothing and exits 1 if anything differs.
 
 ## Accounts and API tokens
 

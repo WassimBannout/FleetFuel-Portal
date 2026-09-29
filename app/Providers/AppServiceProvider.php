@@ -165,5 +165,13 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('api', fn (Request $request): Limit => Limit::perMinute(120)->by(
             (string) ($request->user()?->getAuthIdentifier() ?? $request->ip()),
         ));
+
+        // POS purchase submissions: 60 per minute per station, however many
+        // operator accounts or tokens that station uses.
+        RateLimiter::for('pos-writes', function (Request $request): Limit {
+            $user = $request->user();
+
+            return Limit::perMinute(60)->by('station:'.($user instanceof User ? $user->station_id : $request->ip()));
+        });
     }
 }
