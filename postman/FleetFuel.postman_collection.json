@@ -1,0 +1,1072 @@
+{
+  "info": {
+    "name": "FleetFuel Portal — target MVP contract",
+    "description": "Prepared before implementation. Run against fresh local demo fixtures after M08 for the whole collection, or run completed folders after M06. Password/tokens belong in an untracked local environment. POS requests generate a current timestamp once, then reuse it for replay. See postman/README.md.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 — POS scenario (M06)",
+      "item": [
+        {
+          "name": "Issue station token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": "{{base_url}}/auth/token",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{station_email}}\",\n  \"password\": \"{{demo_password}}\",\n  \"device_name\": \"postman-local\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "const payload = pm.response.json();",
+                  "pm.test(\"Token is present\", () => pm.expect(payload.data.token).to.be.a(\"string\").and.not.empty);",
+                  "pm.environment.set(\"station_token\", payload.data.token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Active stations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{station_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/stations"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Current prices",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{station_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/products/prices"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Initial card balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{station_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/cards/{{card_no}}/balance"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Accept one purchase",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{station_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/transactions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"external_ref\": \"{{external_ref}}\",\n  \"card_no\": \"{{card_no}}\",\n  \"product_code\": \"DIESEL\",\n  \"liters\": \"20.00\",\n  \"transacted_at\": \"{{event_time}}\",\n  \"odometer_km\": 45000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"external_ref\", \"PM-\" + Date.now() + \"-\" + Math.floor(Math.random() * 100000));",
+                  "pm.environment.set(\"event_time\", new Date(Date.now() - 1000).toISOString().replace(/\\.\\d{3}Z$/, \"Z\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "const data = pm.response.json().data;",
+                  "pm.environment.set(\"transaction_id\", data.id);",
+                  "pm.environment.set(\"original_transaction\", JSON.stringify(data));",
+                  "pm.test(\"Volume is a decimal string\", () => pm.expect(data.liters).to.eql(\"20.00\"));",
+                  "pm.test(\"Money is a string\", () => pm.expect(data.amount_usd).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Replay identical purchase",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{station_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/transactions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"external_ref\": \"{{external_ref}}\",\n  \"card_no\": \"{{card_no}}\",\n  \"product_code\": \"DIESEL\",\n  \"liters\": \"20.00\",\n  \"transacted_at\": \"{{event_time}}\",\n  \"odometer_km\": 45000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Replay header\", () => pm.expect(pm.response.headers.get(\"Idempotency-Replayed\")).to.eql(\"true\"));",
+                  "pm.test(\"Original data returned\", () => pm.expect(pm.response.json().data).to.deep.eql(JSON.parse(pm.environment.get(\"original_transaction\"))));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Conflicting retry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{station_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/transactions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"external_ref\": \"{{external_ref}}\",\n  \"card_no\": \"{{card_no}}\",\n  \"product_code\": \"DIESEL\",\n  \"liters\": \"21.00\",\n  \"transacted_at\": \"{{event_time}}\",\n  \"odometer_km\": 45000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", function () { pm.response.to.have.status(409); });",
+                  "pm.test(\"Conflict code\", () => pm.expect(pm.response.json().error.code).to.eql(\"idempotency_conflict\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Blocked card decline",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{station_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/transactions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"external_ref\": \"{{external_ref}}-BLOCKED\",\n  \"card_no\": \"{{blocked_card_no}}\",\n  \"product_code\": \"DIESEL\",\n  \"liters\": \"20.00\",\n  \"transacted_at\": \"{{event_time}}\",\n  \"odometer_km\": 45000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Blocked code\", () => pm.expect(pm.response.json().error.code).to.eql(\"card_blocked\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Over-quota decline",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{station_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/transactions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"external_ref\": \"{{external_ref}}-QUOTA\",\n  \"card_no\": \"{{tiny_card_no}}\",\n  \"product_code\": \"DIESEL\",\n  \"liters\": \"6.00\",\n  \"transacted_at\": \"{{event_time}}\",\n  \"odometer_km\": 45000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Quota code\", () => pm.expect(pm.response.json().error.code).to.eql(\"quota_exceeded\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Purchase detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{station_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/transactions/{{transaction_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Same transaction\", () => pm.expect(String(pm.response.json().data.id)).to.eql(String(pm.environment.get(\"transaction_id\"))));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Balance after one accepted purchase",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{station_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/cards/{{card_no}}/balance"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Exactly one 20-liter debit on fresh fixture\", () => pm.expect(pm.response.json().data.used_l).to.eql(\"20.00\"));",
+                  "pm.test(\"Remaining liters\", () => pm.expect(pm.response.json().data.remaining_l).to.eql(\"80.00\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Missing token rejected",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": "{{base_url}}/transactions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 — Manager access (M06)",
+      "item": [
+        {
+          "name": "Issue manager token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": "{{base_url}}/auth/token",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{manager_email}}\",\n  \"password\": \"{{demo_password}}\",\n  \"device_name\": \"postman-local\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "const payload = pm.response.json();",
+                  "pm.test(\"Token is present\", () => pm.expect(payload.data.token).to.be.a(\"string\").and.not.empty);",
+                  "pm.environment.set(\"manager_token\", payload.data.token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Own vehicles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/vehicles"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Own drivers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/drivers"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Own ledger",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/transactions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Filtered totals exist\", () => pm.expect(pm.response.json().meta.totals).to.have.keys(\"liters\", \"amount_lbp\", \"amount_usd\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Other tenant card hidden",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/cards/FF-CEDAR-001/balance"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager cannot post POS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/transactions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"external_ref\": \"{{external_ref}}-MANAGER\",\n  \"card_no\": \"{{card_no}}\",\n  \"product_code\": \"DIESEL\",\n  \"liters\": \"20.00\",\n  \"transacted_at\": \"{{event_time}}\",\n  \"odometer_km\": 45000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 — Delivery scenario (M07)",
+      "item": [
+        {
+          "name": "Create pending order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/delivery-orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address\": \"Fictional Warehouse, Beirut\",\n  \"governorate\": \"Beirut\",\n  \"liters\": \"500.00\",\n  \"preferred_start_at\": \"{{preferred_start}}\",\n  \"preferred_end_at\": \"{{preferred_end}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"preferred_start\", new Date(Date.now() + 86400000).toISOString().replace(/\\.\\d{3}Z$/, \"Z\"));",
+                  "pm.environment.set(\"preferred_end\", new Date(Date.now() + 90000000).toISOString().replace(/\\.\\d{3}Z$/, \"Z\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.environment.set(\"delivery_id\", pm.response.json().data.id);",
+                  "pm.test(\"Pending\", () => pm.expect(pm.response.json().data.status).to.eql(\"pending\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read order history",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/delivery-orders/{{delivery_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager cancels pending order",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/delivery-orders/{{delivery_id}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_status\": \"pending\",\n  \"status\": \"cancelled\",\n  \"reason\": \"Postman local fixture cancellation\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Cancelled\", () => pm.expect(pm.response.json().data.status).to.eql(\"cancelled\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 — Reports and export (M08)",
+      "item": [
+        {
+          "name": "Consumption by product",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/reports/consumption?group_by=product"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Accounting CSV",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/exports/transactions.csv"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"CSV content type\", () => pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"text/csv\"));",
+                  "pm.test(\"Header present\", () => pm.expect(pm.response.text()).to.include(\"transaction_id,external_ref\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 — Revoke tokens",
+      "item": [
+        {
+          "name": "Revoke station token",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{station_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/auth/token"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoked station token rejected",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{station_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/transactions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoke manager token",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/auth/token"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

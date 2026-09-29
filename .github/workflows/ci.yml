@@ -1,0 +1,47 @@
+# Runs the same Makefile contract a developer uses, so CI proves that a clean
+# checkout can set up the Docker stack and pass every quality gate.
+# Later milestones extend it (docs/07-TEST-PLAN.md, "CI progression").
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Setup and quality gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Creates .env/.env.testing with disposable generated DB credentials.
+      - name: Set up the Docker stack
+        run: make setup
+
+      - name: Readiness check
+        run: curl --fail --silent --show-error http://localhost:8080/health
+
+      - name: Quality gates (lint, analyse, test, build)
+        run: make verify
+
+      - name: Repeated setup keeps key, credentials and data
+        run: sh docker/bin/check-setup-preserves-state.sh
+
+      - name: Service logs
+        if: failure()
+        run: make logs
+
+      - name: Stop the stack
+        if: always()
+        run: make down

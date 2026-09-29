@@ -1,0 +1,41 @@
+# Changelog
+
+## Unreleased
+
+- M03 fleet and reference data:
+  - Paginated Bootstrap screens for companies, stations, products, vehicles, drivers and fuel cards, with filters and literal search. Records are deactivated or archived, never deleted.
+  - Fuel cards:
+    - server-generated numbers;
+    - same-company, active assignments, locked after the first purchase;
+    - decimal-string monthly limits, with a confirmation step when a cut goes below this month's usage;
+    - block, unblock and final archive;
+    - current-month usage and remaining balance.
+  - `FuelCardService`, `FleetService` and `ReferenceDataService`, shared with the future API. Card changes run under the card row lock and every sensitive change is audited.
+  - Tenant-scoped route binding for every fleet and reference route. Role and token-ability checks run before it, so a wrong role gets 403 and another company's record 404.
+  - An inactive company's fleet becomes read-only, except blocking or archiving and deactivation.
+- M02 authentication, roles and isolation:
+  - Fortify sign-in and sign-out with Bootstrap views. There is no registration, password reset or two-factor route.
+  - Failed sign-ins show one generic message, the session is regenerated, sign-in is throttled after 5 failures per email + IP, and a disabled account is signed out on its next request.
+  - Role policies for every model, explicit `visibleTo` tenant scopes and `role:`/`active` route middleware.
+  - Read-only dashboard, station home and purchase detail pages, scoped per role.
+  - Sanctum `POST`/`DELETE /api/v1/auth/token`: role-selected abilities, 24-hour expiry, token-only API access, disabled-account rejection and rate limits.
+  - A shared API error envelope with request IDs; malformed JSON returns 400.
+  - `users:create`, `users:deactivate` and `users:activate` provisioning commands, audited.
+- M01 data model:
+  - 15 migrations for the domain schema, with composite same-company foreign keys, unique keys and named CHECK constraints.
+  - Models, enums and factories.
+  - An append-only guard for ledger, price, rate, history and audit rows.
+  - A ledger fixture builder that keeps counters consistent.
+  - A guarded, deterministic demo seed (`demo:seed --as-of`).
+  - Decimal, Beirut-month and request-hash helpers.
+  - MySQL tests, including an ER-diagram-versus-foreign-key check.
+- Fixed: nginx returned 502 after the `app` container was recreated. It now resolves the upstream at request time, and `make setup`/`make up` finish with a readiness request.
+- M00 foundation:
+  - Laravel 13.33 at the repository root, with the handoff kit preserved.
+  - Docker Compose stack: PHP 8.3 FPM, nginx 1.30, MySQL 8.4 with a separate test database, a scheduler, on-demand Node 24 and optional Mailpit.
+  - Makefile command interface.
+  - `/health` readiness and `/up` liveness checks.
+  - Bootstrap/jQuery project shell.
+  - Pint, Larastan and PHPUnit quality gates.
+  - A CI workflow, not yet run on GitHub.
+- Prepared the Claude Code implementation handoff, specifications, API contract and staged build prompts.

@@ -1,0 +1,7 @@
+# Loaded by the official MySQL image from /etc/mysql/conf.d.
+[mysqld]
+# Match Laravel's default connection charset/collation.
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+# Keep the server clock in UTC so NOW() and TIMESTAMP values agree with Laravel.
+default-time-zone = '+00:00'

@@ -1,0 +1,17 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    # Level 6 is the practical starting point from docs/02-ARCHITECTURE.md.
+    # No baseline file: fix findings instead of hiding them.
+    level: 6
+    # Read each model's casts() array literally, so cast attributes are typed
+    # as enums, Carbon dates and decimal strings instead of raw column types.
+    parseModelCastsMethod: true
+    paths:
+        - app
+        - bootstrap/app.php
+        - config
+        - database
+        - routes
+        - tests

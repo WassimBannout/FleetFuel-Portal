@@ -1,0 +1,140 @@
+# Decisions and source corrections
+
+These are implementation defaults chosen to make the research actionable. They are project design decisions, not claims about a real distributor. Amend with a dated rationale and update specs, contracts and tests together.
+
+| ID | Decision | Rationale / source correction |
+| --- | --- | --- |
+| D01 | Laravel 13 / PHP 8.3 / MySQL 8.4 | Supported framework baseline; lock actual resolved dependencies |
+| D02 | Fortify + custom Bootstrap Blade views | Preserve requested UI stack; do not assume Breeze scaffolding matches Laravel 13 and Bootstrap |
+| D03 | PHPUnit, real MySQL integration tests | One test framework; SQLite cannot establish MySQL locking behavior |
+| D04 | First POST 201, exact replay 200, changed payload 409 | A harmless retry should return the original success; source suggested 409 for every duplicate |
+| D05 | Card lock plus monthly usage row | Database atomicity for concurrent spending, across all stations |
+| D06 | LBP per-liter canonical price, USD derived | Avoid two independently editable prices disagreeing; persist transaction snapshots |
+| D07 | Decimal strings, explicit half-up rounding | No binary float financial arithmetic; documented amount-based USD conversion |
+| D08 | UTC storage, Beirut business months, <=72h ingestion | Bound late POS traffic and define month-boundary behavior |
+| D09 | FX freshness <=72h at transaction time | Last-known fallback is bounded and never silently becomes zero/1:1 |
+| D10 | Immutable FX observations and expiring manual overrides | Preserve provenance; overrides cannot silently rewrite history |
+| D11 | Quota reduction below usage allowed and audited | Explains legitimate over-quota report rows despite rejecting overspending; remaining balance floors at zero |
+| D12 | Explicit tenant-scoped queries and policies | Scope every surface, including reports and dropdowns; no magic global scope hiding admin behavior |
+| D13 | Snapshot transaction ownership and vehicle data | Reports remain historically accurate; referenced entities archived instead of deleted |
+| D14 | Card ownership immutable; assignment fixed after first use | Simplifies junior MVP and prevents accidental transfer of historic usage |
+| D15 | Append-only accepted fuel ledger | Refunds/imports/accounting corrections require later design, outside MVP |
+| D16 | No self-registration or role mutation by users | Internal B2B roles are provisioned deliberately |
+| D17 | Complete MySQL MVP before SQL Server | Portability is not verified until driver, migrations, queries and tests run there |
+| D18 | No enforcement of `credit_limit_usd` | Source listed a field without billing rules; omit until credit model exists |
+| D19 | Versioned static OpenAPI plus Postman | Satisfies API documentation without making Scribe a build dependency |
+| D20 | Docker-first dependencies | Host Composer is missing; preserve existing machine configuration |
+| D21 | No paid hosting assumption | Prepare deployment first, choose/publish only with user's actual account and direction |
+| D22 | Live provider data stays server-side | Show attribution on converted-value pages; do not publish a raw exchange-rate redistribution API |
+
+## Change record
+
+2026-09-28: Initial defaults above. No unresolved product choice blocks local MVP development.
+
+2026-09-28 (M00): Implementation choices within existing decisions; no product behavior changed and no spec contract changed.
+
+- D03/D20, test isolation: MySQL init creates a separate `fleetfuel_test` user whose grants cover only databases matching `fleetfuel\_test%`; the dev user covers only `fleetfuel`. Root gets a random password that nothing stores. Tests also refuse any database other than `fleetfuel_test*` (guard in `tests/TestCase.php`) and never read a development config cache (`APP_CONFIG_CACHE` in `phpunit.xml`).
+- D08/D09: the 72-hour FX and POS age limits are constants in `config/fleetfuel.php`, not per-environment variables, so the rule cannot drift between environments. Tests arrive with M04/M05.
+- D02/D16: Fortify is installed, but `Fortify::ignoreRoutes()` keeps its default routes (including public registration) off until M02 configures login with Bootstrap views.
+- Health: `/up` is Laravel's liveness route; `/health` is JSON readiness with a database check. It sits outside the session middleware and returns 503 without details when MySQL is down.
+- Queue: `QUEUE_CONNECTION=sync` with no worker, per docs/09 ("a queue worker is unnecessary until a queued feature exists").
+- Skeleton cleanup: removed Tailwind, `concurrently`, `@laravel/multiplex`, the bunny-font Vite option and the `laravel/pao` agent-output package. Removed the Composer `setup`/`dev` scripts, which were a non-Docker SQLite setup path. Did not copy the skeleton's `CLAUDE.md`/`AGENTS.md`, which tell agents to install host PHP and Laravel Boost, conflicting with this project's CLAUDE.md. Added Bootstrap 5.3, Popper 2 and jQuery 4.0.
+- License: the skeleton's `"license": "MIT"` is replaced by the placeholder `proprietary` (all rights reserved). Choosing the real license stays with the user at M11.
+
+2026-09-28 (M01): Schema and fixture choices within existing decisions. No product rule changed; the ER diagram in 03-DATA-MODEL was completed to list every real foreign key.
+
+- D12/D13/D14, ownership in the database: composite foreign keys make MySQL reject a card whose vehicle or driver belongs to another company, and a ledger row whose company snapshot differs from its card, vehicle or driver. Parent tables carry a `UNIQUE (company_id, id)` key for this. Validation still runs first; the keys are the backstop.
+- CHECK constraints: named, portable `ALTER TABLE … ADD CONSTRAINT … CHECK` statements (positive amounts, allowed status/enum strings, user role scope, delivery state details, manual-rate reason). They are enforced by MySQL 8.4 and tested; SQL Server behavior is unverified until S01.
+- D15, append-only rows: prices, rates, the ledger, delivery history and audit logs have `created_at` only, no `updated_at`. An `AppendOnly` model trait throws on Eloquent update and delete. Raw query-builder statements bypass it; there are no database triggers or per-table grants in the MVP.
+- Time columns: domain instants are `DATETIME` storing UTC (the server time zone is +00:00), avoiding `TIMESTAMP`'s 2038 limit and session time-zone conversion. Laravel's own `created_at`/`updated_at` stay `TIMESTAMP`.
+- Framework defaults set in AppServiceProvider:
+  - dates are `CarbonImmutable`;
+  - `Model::shouldBeStrict()` outside production (lazy-loading, discarded-attribute and missing-attribute errors);
+  - an enforced morph map, so polymorphic columns store stable aliases such as `fuel_card`.
+- Shared helpers introduced early because seeded history needs them: `FuelAmounts` (half-up decimal arithmetic), `BusinessMonth` (Beirut quota months), `PosRequestHash` (canonical request hash), `UsageReconciliation` (read-only counter check) and `DeliveryStatus` transitions. M04, M05 and M07 must reuse and extend them (input validation, bounds, commands), not duplicate them.
+- Ledger fixtures: `Database\Seeders\Support\LedgerFixtureBuilder` writes purchases, quota changes, manual rates and delivery transitions under the documented locks and audit rules until the real services exist. It resolves rates in fixture mode only (manual override first, then fixture). M05 must reconcile it with FuelTransactionService.
+- Demo seeding:
+  - `DemoSeeder` is guarded (local/testing only, `DEMO_MODE` on, `DEMO_PASSWORD` set, no existing users) and only inserts.
+  - `php artisan demo:seed --as-of=<ISO-8601 with offset>` picks the clock; it must not be in the future.
+  - Scenario times are fractions of the elapsed month, so any as-of works. Current-month scenarios are skipped when the as-of is less than two hours into its month.
+  - The admin override expires before the as-of, so simulator purchases use the fixture rate.
+  - `prepare-env.sh` now also generates `DEMO_PASSWORD` when it creates `.env`.
+  - `DatabaseSeeder` no longer uses `WithoutModelEvents`, so the append-only guards stay active while seeding.
+- Tooling: Larastan `parseModelCastsMethod: true`. Without it Larastan ignored every `casts()` array (because of the skeleton's `array<string, string>` return docblock) and typed casts as raw column types.
+- M00 fix found during M01: after `make setup` recreated the `app` container, nginx kept the old container IP and returned 502. nginx now resolves `app` through Docker DNS at request time, and `make setup`/`make up` end with a real `/health` request instead of trusting cached container health.
+
+2026-09-29 (M02): Authentication and isolation choices within D02, D12 and D16. No product rule changed. 05-API-CONTRACT now records the chosen rate limits, request IDs, `method_not_allowed` (405) and the rejection of unknown fields.
+
+- D02/D16, Fortify:
+  - Fortify 1.40's package defaults enable registration, password reset, two-factor and passkeys, and its route file always adds password-confirmation routes.
+  - So `config/fortify.php` sets `features => []` and `Fortify::ignoreRoutes()` stays. `routes/web.php` registers only `GET/POST /login` and `POST /logout`, pointed at Fortify's own controllers, so Fortify's throttling, username lowercasing, session regeneration and logout invalidation still run.
+  - A test asserts that the other Fortify paths (and Sanctum's `/sanctum/csrf-cookie`, turned off with `sanctum.routes => false`) return 404.
+- Credentials: `App\Services\CredentialVerifier` is the single check behind web sign-in (`Fortify::authenticateUsing`) and API token issuance.
+  - Unknown email, wrong password and disabled account all fail with the same message (`auth.failed`) and the same 401 body.
+  - An unknown email still spends one hash operation, so response time does not reveal whether an email is registered.
+- Login throttle: web sign-in uses Fortify's built-in limiter, which counts failed attempts only and shows a form error. It allows 5 failed attempts per email + IP per minute, and a success clears the count. Token issuance uses the named limiter `token-issue`: 5 requests per minute per email + IP, counting every request, over the limit 429 with `Retry-After`. Authenticated API requests use `api`: 120 per minute per user.
+- D12, tenant scoping: tenant models have explicit `scopeVisibleTo(User)` local scopes, never global scopes:
+  - vehicles, drivers, cards and deliveries: `BelongsToCompany`;
+  - purchases: company for managers, station for operators;
+  - companies;
+  - stations and products: active only for non-admins;
+  - audit logs: admin only.
+
+  Order of checks on a record: role-level policy (403), then scoped lookup (404, so a guessed foreign ID looks like a missing one), then the record policy (403). Controllers load records explicitly with `->visibleTo($user)->findOrFail()`; no implicit route-model binding for tenant data.
+- Policies: one per model, encoding the brief's capability table. Each has a `before()` that denies a disabled account everything. Accepted purchases and prices have no update or delete ability. `role:` route middleware fences off each role's area, and `active` middleware signs out a user disabled after sign-in on their next request.
+- Sanctum:
+  - `sanctum.guard => []` makes the API token-only; a browser session cookie never authenticates `/api/v1`.
+  - Tokens get `expires_at = now + 24 h`, with `sanctum.expiration = 1440` minutes as a backstop.
+  - `Sanctum::authenticateAccessTokensUsing` rejects any token whose account is disabled.
+  - Abilities come from `UserRole::tokenAbilities()` (the contract table); a request naming `abilities` or `role` is a 422, via `RejectsUnknownFields`.
+  - Token responses send `Cache-Control: no-store`.
+- API errors: `App\Exceptions\ApiErrorRenderer` renders every `/api/*` exception as the documented envelope. 500s are generic even with `APP_DEBUG=true`, and `Retry-After` is preserved. `RejectMalformedJson` returns 400 `malformed_json` for an unparseable or non-object JSON body. Browser pages keep Laravel's HTML error pages, and session AJAX error shape is decided when AJAX screens arrive (M08/M09).
+- Request IDs: `AssignRequestId` (global) generates a UUID per request and ignores any client-supplied value, to prevent log injection and ID collisions. It puts the ID in Laravel `Context`, so every log entry carries it, and in the `X-Request-Id` header. `App\Support\RequestId::current()` reads it for audit rows and error bodies.
+- D16, provisioning:
+  - `users:create` asks for the password at a hidden prompt only (minimum 12 characters; never an option, which would land in shell history). It enforces the role/company/station rule and an active company or station.
+  - `users:deactivate` refuses sign-in, deletes every API token, deletes stored database sessions and rotates the remember token.
+  - `users:activate` re-enables an account; revoked tokens stay revoked.
+  - Each writes an audit row (`user.created`/`deactivated`/`activated`, no actor for the command line) through the new `App\Services\AuditService`, which M03+ services reuse.
+  - There is no password-reset feature yet (no email flow in the MVP).
+- Inactive company or station: its users can still sign in and read. Writes are refused from M03 (fleet) and M05 (POS), as the brief says.
+- Read-only pages added in M02 so isolation is testable on real routes: the dashboard (scoped counts and latest 10 purchases), the station home (latest 25 purchases at the operator's station plus token instructions) and purchase detail. Card numbers are masked to the last four characters on screens. M08/M09 add filters, reports and polish.
+- Observation, unchanged: the Laravel skeleton's signed local-disk routes (`GET`/`PUT storage/{path}`, from `filesystems.disks.local.serve`) are registered. They are unused and reject requests without a valid signature.
+
+2026-09-29 (M03): Fleet and reference-data screens within D12, D13, D14 and D11. No product rule changed. The points below fill in details the specs leave open.
+
+- D12, tenant-scoped route binding:
+  - `AppServiceProvider::bindTenantScopedModels()` resolves `{company}`, `{station}`, `{product}`, `{vehicle}`, `{driver}` and `{card}` through `Model::visibleTo($user)`, so another company's record is a 404 on every route that names it, including future API routes.
+  - `bootstrap/app.php` moves `active`, `role:` and Sanctum `abilities`/`ability` ahead of route binding in the middleware priority. A wrong role or missing token ability therefore still gets 403, not 404.
+  - API routes (M06) must declare `role:` middleware for role-level denials to be 403.
+  - The M02 test route in `AbilitiesAndPoliciesTest` now uses this wiring.
+- Services shared with the API:
+  - `FuelCardService`: issue, assignment, limits, status, balance.
+  - `FleetService`: vehicles, drivers.
+  - `ReferenceDataService`: companies, stations, products.
+
+  Controllers only call a Form Request (validation plus policy) and a service. `BusinessRuleViolation` (extends `ApiException`) carries the documented code: `company_inactive` 403, `assignment_locked` 409, `invalid_transition` 409 for an archived card. On `/api/*` it becomes the envelope; on web pages it returns to the form with the message.
+- D14, cards:
+  - Every card change runs in one transaction that first reads the card `FOR UPDATE`, the lock M05 ingestion will also take, and writes one audit row.
+  - Company ownership never changes; `company_id` on any update is a validation error.
+  - Vehicle, driver and product restriction change only while the card has no transactions; this is checked under the lock.
+  - Archived is final, with no restore and no edits.
+  - Card numbers are generated by the server (`FF-XXXX-XXXX`, without 0/O/1/I look-alikes), not typed by users.
+  - Audit values never contain the card number; `auditable_id` identifies the card.
+- D11, quota cuts: lowering a limit below this Beirut month's usage is allowed and audited with `below_current_usage: true`.
+  - The web screen first refuses it with a warning and asks for a tick box, via `allowBelowUsage` in `FuelCardService::updateLimits`.
+  - The API (M06) will pass `true`, as the contract says reductions are valid.
+  - Only a changed dimension triggers the warning. Limits are validated as plain decimal strings (`App\Rules\DecimalString`: no sign, exponent, separators or extra decimals), and an empty value means unlimited.
+- Inactive company: its fleet becomes read-only, except actions that reduce spending: blocking or archiving cards and deactivating vehicles or drivers. Creating records, editing, raising or setting limits, unblocking and reactivating are refused with `company_inactive`. Its users can still sign in and read.
+- Vehicles: the plate is normalized to capitals with single spaces and is unique across all companies. The fuel type is fixed at creation, like the company, because card product restrictions depend on it. Tank capacity and odometer stay editable; purchases keep their own snapshot. Drivers: the license number is normalized and unique per company.
+- Products: the three codes are fixed, so admins can only rename or deactivate them. The price timeline is M04.
+- Stations and products: every role reads the active ones (reference data); only admins change them.
+- Audited in M03:
+  - `card.created`, `card.assignment_changed`, `card.limits_changed`, `card.status_changed`;
+  - `company.activated`/`deactivated`;
+  - `station.*`, `product.*`, `vehicle.*` and `driver.*` activation changes.
+
+  Plain name or plate edits are not audited. No delete routes exist; `DELETE` answers 405.
+- Admins see a card's audit history on its page; the full audit screen with filters is later UI work. Card numbers are masked in lists and shown in full on the card page to the admin and the owning manager.
+- Testing note: the session uses JSON serialization, Laravel 13's default. Calling `assertSessionHasErrors()` between two requests in one test re-loads the session and empties the error bag of the next simulated request. Tests that check a page after a refused form follow the redirect in one chain. The real app shows the errors; this was verified live through nginx.
+
+Template: date, affected decision, old/new behavior, reason, spec/test updates, migration implications.

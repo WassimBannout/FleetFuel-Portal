@@ -1,0 +1,3562 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "FleetFuel Portal API — target contract",
+    "version": "0.1.0",
+    "description": "Implementation handoff. No server exists yet. Validate against implementation in M06–M08. Business details: docs/04-BUSINESS-RULES.md and docs/05-API-CONTRACT.md."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080/api/v1",
+      "description": "Local development after M00"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/auth/token": {
+      "post": {
+        "operationId": "issueToken",
+        "summary": "Issue a role-scoped 24-hour token",
+        "responses": {
+          "201": {
+            "description": "Token issued once.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Token"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, revoked token or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, ability, active-state or business-rule denial.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource absent or hidden by tenant scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed or no eligible product price.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until retry."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected internal error; no stack trace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "revokeToken",
+        "summary": "Revoke current bearer token",
+        "responses": {
+          "204": {
+            "description": "Revoked; empty body."
+          },
+          "400": {
+            "description": "Malformed JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, revoked token or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, ability, active-state or business-rule denial.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource absent or hidden by tenant scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed or no eligible product price.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until retry."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected internal error; no stack trace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stations": {
+      "get": {
+        "operationId": "listStations",
+        "summary": "List active stations",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Station"
+                      }
+                    },
+                    "links": {
+                      "$ref": "#/components/schemas/Links"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMeta"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "links",
+                    "meta"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, revoked token or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, ability, active-state or business-rule denial.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource absent or hidden by tenant scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed or no eligible product price.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until retry."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected internal error; no stack trace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/page"
+          },
+          {
+            "$ref": "#/components/parameters/per_page"
+          },
+          {
+            "name": "governorate",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/products/prices": {
+      "get": {
+        "operationId": "listPrices",
+        "summary": "Resolve active product prices at an instant",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Price"
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, revoked token or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, ability, active-state or business-rule denial.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource absent or hidden by tenant scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed or no eligible product price.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until retry."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected internal error; no stack trace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No eligible rate.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "at",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Offset-bearing ISO timestamp, whole seconds. Responses use UTC Z."
+            }
+          }
+        ]
+      }
+    },
+    "/transactions": {
+      "post": {
+        "operationId": "createTransaction",
+        "summary": "Station-only atomic POS ingestion",
+        "responses": {
+          "200": {
+            "description": "Exact canonical replay; no second spend.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Transaction"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "const": "true"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "New accepted transaction.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Transaction"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Transaction detail URI."
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, revoked token or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, ability, active-state or business-rule denial.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource absent or hidden by tenant scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Same station/ref with different canonical payload.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed or no eligible product price.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until retry."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected internal error; no stack trace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Rate unavailable or bounded contention retries exhausted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Station is derived from token. Decimal strings only. 72-hour new-event window. Exact canonical replay returns original resource even if its age or mutable rules changed.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransactionRequest"
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listTransactions",
+        "summary": "List scoped ledger; totals cover the whole filter",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Transaction"
+                      }
+                    },
+                    "links": {
+                      "$ref": "#/components/schemas/Links"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMeta"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "links",
+                    "meta"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, revoked token or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, ability, active-state or business-rule denial.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource absent or hidden by tenant scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed or no eligible product price.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until retry."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected internal error; no stack trace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/from"
+          },
+          {
+            "$ref": "#/components/parameters/to"
+          },
+          {
+            "$ref": "#/components/parameters/company_id"
+          },
+          {
+            "$ref": "#/components/parameters/card"
+          },
+          {
+            "$ref": "#/components/parameters/station_id"
+          },
+          {
+            "$ref": "#/components/parameters/product_code"
+          },
+          {
+            "$ref": "#/components/parameters/page"
+          },
+          {
+            "$ref": "#/components/parameters/per_page"
+          }
+        ],
+        "description": "Admin all, manager own company, operator own station. meta.totals is required on this endpoint."
+      }
+    },
+    "/transactions/{id}": {
+      "get": {
+        "operationId": "showTransaction",
+        "summary": "Read scoped immutable transaction",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Transaction"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, revoked token or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, ability, active-state or business-rule denial.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource absent or hidden by tenant scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed or no eligible product price.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until retry."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected internal error; no stack trace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ]
+      }
+    },
+    "/cards/{card_no}/balance": {
+      "get": {
+        "operationId": "cardBalance",
+        "summary": "Read minimal current-limit balance for POS",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Balance"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, revoked token or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, ability, active-state or business-rule denial.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource absent or hidden by tenant scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed or no eligible product price.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until retry."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected internal error; no stack trace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "card_no",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 40,
+              "pattern": "^[A-Za-z0-9-]+$"
+            }
+          },
+          {
+            "name": "month",
+            "in": "query",
+            "description": "Current or immediately previous Beirut month; defaults current.",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}$"
+            }
+          }
+        ]
+      }
+    },
+    "/cards/{id}": {
+      "patch": {
+        "operationId": "updateCard",
+        "summary": "Admin or own manager updates quotas/status",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Card"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, revoked token or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, ability, active-state or business-rule denial.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource absent or hidden by tenant scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Card state does not permit change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed or no eligible product price.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until retry."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected internal error; no stack trace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardPatch"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vehicles": {
+      "get": {
+        "operationId": "listVehicles",
+        "summary": "List tenant-scoped vehicles",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Vehicle"
+                      }
+                    },
+                    "links": {
+                      "$ref": "#/components/schemas/Links"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMeta"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "links",
+                    "meta"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, revoked token or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, ability, active-state or business-rule denial.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource absent or hidden by tenant scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed or no eligible product price.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until retry."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected internal error; no stack trace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/page"
+          },
+          {
+            "$ref": "#/components/parameters/per_page"
+          },
+          {
+            "$ref": "#/components/parameters/company_id"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "createVehicle",
+        "summary": "Create vehicle in allowed company",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Vehicle"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, revoked token or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, ability, active-state or business-rule denial.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource absent or hidden by tenant scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed or no eligible product price.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until retry."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected internal error; no stack trace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VehicleRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/drivers": {
+      "get": {
+        "operationId": "listDrivers",
+        "summary": "List tenant-scoped drivers",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Driver"
+                      }
+                    },
+                    "links": {
+                      "$ref": "#/components/schemas/Links"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMeta"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "links",
+                    "meta"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, revoked token or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, ability, active-state or business-rule denial.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource absent or hidden by tenant scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed or no eligible product price.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until retry."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected internal error; no stack trace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/page"
+          },
+          {
+            "$ref": "#/components/parameters/per_page"
+          },
+          {
+            "$ref": "#/components/parameters/company_id"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "createDriver",
+        "summary": "Create driver in allowed company",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Driver"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, revoked token or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, ability, active-state or business-rule denial.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource absent or hidden by tenant scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed or no eligible product price.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until retry."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected internal error; no stack trace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DriverRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/delivery-orders": {
+      "get": {
+        "operationId": "listDeliveries",
+        "summary": "List own-company or admin delivery orders",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Delivery"
+                      }
+                    },
+                    "links": {
+                      "$ref": "#/components/schemas/Links"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMeta"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "links",
+                    "meta"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, revoked token or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, ability, active-state or business-rule denial.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource absent or hidden by tenant scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed or no eligible product price.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until retry."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected internal error; no stack trace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/page"
+          },
+          {
+            "$ref": "#/components/parameters/per_page"
+          },
+          {
+            "$ref": "#/components/parameters/company_id"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "scheduled",
+                "out_for_delivery",
+                "delivered",
+                "cancelled"
+              ]
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "createDelivery",
+        "summary": "Create pending diesel delivery with initial history",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Delivery"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, revoked token or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, ability, active-state or business-rule denial.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource absent or hidden by tenant scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed or no eligible product price.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until retry."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected internal error; no stack trace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/delivery-orders/{id}": {
+      "get": {
+        "operationId": "showDelivery",
+        "summary": "Read scoped delivery and history",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Delivery"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, revoked token or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, ability, active-state or business-rule denial.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource absent or hidden by tenant scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed or no eligible product price.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until retry."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected internal error; no stack trace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ]
+      }
+    },
+    "/delivery-orders/{id}/status": {
+      "patch": {
+        "operationId": "transitionDelivery",
+        "summary": "Advance lifecycle or cancel own pending order",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Delivery"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, revoked token or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, ability, active-state or business-rule denial.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource absent or hidden by tenant scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stale expected_status or invalid transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed or no eligible product price.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until retry."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected internal error; no stack trace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Admin advances states. Manager may only cancel own pending order. expected_status is required. Scheduling needs future scheduled_start_at/end_at and assigned_truck; cancellation needs reason.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/consumption": {
+      "get": {
+        "operationId": "consumptionReport",
+        "summary": "Tenant-scoped sums of immutable snapshots",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Consumption"
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, revoked token or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, ability, active-state or business-rule denial.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource absent or hidden by tenant scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed or no eligible product price.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until retry."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected internal error; no stack trace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/from"
+          },
+          {
+            "$ref": "#/components/parameters/to"
+          },
+          {
+            "$ref": "#/components/parameters/company_id"
+          },
+          {
+            "name": "group_by",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "company",
+                "vehicle",
+                "product"
+              ],
+              "default": "company"
+            }
+          }
+        ]
+      }
+    },
+    "/exports/transactions.csv": {
+      "get": {
+        "operationId": "exportTransactions",
+        "summary": "Export all scoped/filter-matched rows, with safe CSV cells",
+        "responses": {
+          "200": {
+            "description": "CSV with specified columns, including header. Tenant-scoped, formula-safe, streamed.",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, revoked token or invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, ability, active-state or business-rule denial.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource absent or hidden by tenant scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed or no eligible product price.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until retry."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected internal error; no stack trace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/from"
+          },
+          {
+            "$ref": "#/components/parameters/to"
+          },
+          {
+            "$ref": "#/components/parameters/company_id"
+          },
+          {
+            "$ref": "#/components/parameters/card"
+          },
+          {
+            "$ref": "#/components/parameters/station_id"
+          },
+          {
+            "$ref": "#/components/parameters/product_code"
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Laravel Sanctum personal access token; active role/ownership checks also required."
+      }
+    },
+    "parameters": {
+      "page": {
+        "name": "page",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "per_page": {
+        "name": "per_page",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 25
+        }
+      },
+      "from": {
+        "name": "from",
+        "in": "query",
+        "description": "Inclusive Beirut local date. Maximum range 366 days.",
+        "schema": {
+          "type": "string",
+          "format": "date"
+        }
+      },
+      "to": {
+        "name": "to",
+        "in": "query",
+        "description": "Exclusive Beirut local date.",
+        "schema": {
+          "type": "string",
+          "format": "date"
+        }
+      },
+      "company_id": {
+        "name": "company_id",
+        "in": "query",
+        "description": "Admin only; all other callers must omit.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "card": {
+        "name": "card",
+        "in": "query",
+        "schema": {
+          "type": "string",
+          "maxLength": 40,
+          "pattern": "^[A-Za-z0-9-]+$"
+        }
+      },
+      "station_id": {
+        "name": "station_id",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "product_code": {
+        "name": "product_code",
+        "in": "query",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "ULP95",
+            "ULP98",
+            "DIESEL"
+          ]
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "request_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "details",
+              "request_id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "company_manager",
+              "station_operator"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "role"
+        ],
+        "additionalProperties": false
+      },
+      "TokenRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "minLength": 1
+          },
+          "device_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "device_name"
+        ],
+        "additionalProperties": false
+      },
+      "Token": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Offset-bearing ISO timestamp, whole seconds. Responses use UTC Z."
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
+          }
+        },
+        "required": [
+          "token",
+          "expires_at",
+          "user"
+        ],
+        "additionalProperties": false
+      },
+      "Station": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string"
+          },
+          "district": {
+            "type": "string"
+          },
+          "governorate": {
+            "type": "string"
+          },
+          "is_active": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "district",
+          "governorate",
+          "is_active"
+        ],
+        "additionalProperties": false
+      },
+      "Price": {
+        "type": "object",
+        "properties": {
+          "product_code": {
+            "type": "string",
+            "enum": [
+              "ULP95",
+              "ULP98",
+              "DIESEL"
+            ]
+          },
+          "unit": {
+            "type": "string",
+            "const": "L"
+          },
+          "unit_price_lbp": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,4})?$",
+            "description": "Plain decimal string, at most 4 places; response values use fixed scale."
+          },
+          "indicative_unit_price_usd": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,4})?$",
+            "description": "Plain decimal string, at most 4 places; response values use fixed scale."
+          },
+          "effective_from": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Offset-bearing ISO timestamp, whole seconds. Responses use UTC Z."
+          },
+          "rate_effective_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Offset-bearing ISO timestamp, whole seconds. Responses use UTC Z."
+          }
+        },
+        "required": [
+          "product_code",
+          "unit",
+          "unit_price_lbp",
+          "indicative_unit_price_usd",
+          "effective_from",
+          "rate_effective_at"
+        ],
+        "additionalProperties": false
+      },
+      "TransactionRequest": {
+        "type": "object",
+        "properties": {
+          "external_ref": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9-]+$"
+          },
+          "card_no": {
+            "type": "string",
+            "maxLength": 40,
+            "pattern": "^[A-Za-z0-9-]+$"
+          },
+          "product_code": {
+            "type": "string",
+            "enum": [
+              "ULP95",
+              "ULP98",
+              "DIESEL"
+            ]
+          },
+          "liters": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "transacted_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Offset-bearing ISO timestamp, whole seconds. Responses use UTC Z."
+          },
+          "odometer_km": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          }
+        },
+        "required": [
+          "external_ref",
+          "card_no",
+          "product_code",
+          "liters",
+          "transacted_at"
+        ],
+        "additionalProperties": false
+      },
+      "Transaction": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "external_ref": {
+            "type": "string"
+          },
+          "station_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "company_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "card_no": {
+            "type": "string",
+            "maxLength": 40,
+            "pattern": "^[A-Za-z0-9-]+$"
+          },
+          "product_code": {
+            "type": "string",
+            "enum": [
+              "ULP95",
+              "ULP98",
+              "DIESEL"
+            ]
+          },
+          "liters": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "unit_price_lbp": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,4})?$",
+            "description": "Plain decimal string, at most 4 places; response values use fixed scale."
+          },
+          "amount_lbp": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "amount_usd": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "rate_lbp_per_usd": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,8})?$",
+            "description": "Plain decimal string, at most 8 places; response values use fixed scale."
+          },
+          "rate_source": {
+            "type": "string",
+            "enum": [
+              "fixture",
+              "provider",
+              "manual"
+            ]
+          },
+          "rate_effective_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Offset-bearing ISO timestamp, whole seconds. Responses use UTC Z."
+          },
+          "transacted_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Offset-bearing ISO timestamp, whole seconds. Responses use UTC Z."
+          },
+          "quota_month": {
+            "type": "string",
+            "format": "date"
+          },
+          "odometer_km": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "external_ref",
+          "station_id",
+          "company_id",
+          "card_no",
+          "product_code",
+          "liters",
+          "unit_price_lbp",
+          "amount_lbp",
+          "amount_usd",
+          "rate_lbp_per_usd",
+          "rate_source",
+          "rate_effective_at",
+          "transacted_at",
+          "quota_month",
+          "odometer_km"
+        ],
+        "additionalProperties": false
+      },
+      "Totals": {
+        "type": "object",
+        "properties": {
+          "liters": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "amount_lbp": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "amount_usd": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          }
+        },
+        "required": [
+          "liters",
+          "amount_lbp",
+          "amount_usd"
+        ],
+        "additionalProperties": false
+      },
+      "PageMeta": {
+        "type": "object",
+        "properties": {
+          "current_page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "per_page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "last_page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "totals": {
+            "$ref": "#/components/schemas/Totals"
+          }
+        },
+        "required": [
+          "current_page",
+          "per_page",
+          "last_page",
+          "total"
+        ],
+        "additionalProperties": false
+      },
+      "Links": {
+        "type": "object",
+        "properties": {
+          "first": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prev": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "first",
+          "last",
+          "prev",
+          "next"
+        ],
+        "additionalProperties": false
+      },
+      "Balance": {
+        "type": "object",
+        "properties": {
+          "card_no": {
+            "type": "string",
+            "maxLength": 40,
+            "pattern": "^[A-Za-z0-9-]+$"
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "blocked",
+              "archived"
+            ]
+          },
+          "monthly_limit_l": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "monthly_limit_usd": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "used_l": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "used_usd": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "remaining_l": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "remaining_usd": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "over_quota": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "card_no",
+          "month",
+          "status",
+          "monthly_limit_l",
+          "monthly_limit_usd",
+          "used_l",
+          "used_usd",
+          "remaining_l",
+          "remaining_usd",
+          "over_quota"
+        ],
+        "additionalProperties": false
+      },
+      "CardPatch": {
+        "type": "object",
+        "properties": {
+          "monthly_limit_l": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "monthly_limit_usd": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "blocked"
+            ]
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "minProperties": 1
+      },
+      "Card": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "company_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "vehicle_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "driver_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "card_no": {
+            "type": "string",
+            "maxLength": 40,
+            "pattern": "^[A-Za-z0-9-]+$"
+          },
+          "allowed_product_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "monthly_limit_l": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "monthly_limit_usd": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "blocked",
+              "archived"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "company_id",
+          "vehicle_id",
+          "driver_id",
+          "card_no",
+          "allowed_product_id",
+          "monthly_limit_l",
+          "monthly_limit_usd",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "VehicleRequest": {
+        "type": "object",
+        "properties": {
+          "company_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Required for admin; forbidden for manager."
+          },
+          "plate_no": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 30
+          },
+          "fuel_type": {
+            "type": "string",
+            "enum": [
+              "petrol",
+              "diesel"
+            ]
+          },
+          "tank_capacity_l": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "odometer_km": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          }
+        },
+        "required": [
+          "plate_no",
+          "fuel_type",
+          "tank_capacity_l"
+        ],
+        "additionalProperties": false
+      },
+      "Vehicle": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "company_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "plate_no": {
+            "type": "string"
+          },
+          "fuel_type": {
+            "type": "string",
+            "enum": [
+              "petrol",
+              "diesel"
+            ]
+          },
+          "tank_capacity_l": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "odometer_km": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "is_active": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "company_id",
+          "plate_no",
+          "fuel_type",
+          "tank_capacity_l",
+          "odometer_km",
+          "is_active"
+        ],
+        "additionalProperties": false
+      },
+      "DriverRequest": {
+        "type": "object",
+        "properties": {
+          "company_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Required for admin; forbidden for manager."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "license_no": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 30
+          }
+        },
+        "required": [
+          "name",
+          "license_no"
+        ],
+        "additionalProperties": false
+      },
+      "Driver": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "company_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string"
+          },
+          "license_no": {
+            "type": "string"
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "is_active": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "company_id",
+          "name",
+          "license_no",
+          "phone",
+          "is_active"
+        ],
+        "additionalProperties": false
+      },
+      "DeliveryRequest": {
+        "type": "object",
+        "properties": {
+          "company_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Required for admin; forbidden for manager."
+          },
+          "address": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "governorate": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "liters": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "preferred_start_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Offset-bearing ISO timestamp, whole seconds. Responses use UTC Z."
+          },
+          "preferred_end_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Offset-bearing ISO timestamp, whole seconds. Responses use UTC Z."
+          }
+        },
+        "required": [
+          "address",
+          "governorate",
+          "liters",
+          "preferred_start_at",
+          "preferred_end_at"
+        ],
+        "additionalProperties": false
+      },
+      "TransitionRequest": {
+        "type": "object",
+        "properties": {
+          "expected_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "scheduled",
+              "out_for_delivery",
+              "delivered",
+              "cancelled"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "scheduled",
+              "out_for_delivery",
+              "delivered",
+              "cancelled"
+            ]
+          },
+          "scheduled_start_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Offset-bearing ISO timestamp, whole seconds. Responses use UTC Z."
+          },
+          "scheduled_end_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Offset-bearing ISO timestamp, whole seconds. Responses use UTC Z."
+          },
+          "assigned_truck": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "expected_status",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "DeliveryHistory": {
+        "type": "object",
+        "properties": {
+          "from_status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              null,
+              "pending",
+              "scheduled",
+              "out_for_delivery",
+              "delivered",
+              "cancelled"
+            ]
+          },
+          "to_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "scheduled",
+              "out_for_delivery",
+              "delivered",
+              "cancelled"
+            ]
+          },
+          "changed_by": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "changed_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Offset-bearing ISO timestamp, whole seconds. Responses use UTC Z."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "from_status",
+          "to_status",
+          "changed_by",
+          "changed_at",
+          "note"
+        ],
+        "additionalProperties": false
+      },
+      "Delivery": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "company_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "address": {
+            "type": "string"
+          },
+          "governorate": {
+            "type": "string"
+          },
+          "liters": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "preferred_start_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Offset-bearing ISO timestamp, whole seconds. Responses use UTC Z."
+          },
+          "preferred_end_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Offset-bearing ISO timestamp, whole seconds. Responses use UTC Z."
+          },
+          "scheduled_start_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Offset-bearing ISO timestamp, whole seconds. Responses use UTC Z."
+          },
+          "scheduled_end_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Offset-bearing ISO timestamp, whole seconds. Responses use UTC Z."
+          },
+          "assigned_truck": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "scheduled",
+              "out_for_delivery",
+              "delivered",
+              "cancelled"
+            ]
+          },
+          "delivered_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Offset-bearing ISO timestamp, whole seconds. Responses use UTC Z."
+          },
+          "cancel_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryHistory"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "company_id",
+          "address",
+          "governorate",
+          "liters",
+          "preferred_start_at",
+          "preferred_end_at",
+          "scheduled_start_at",
+          "scheduled_end_at",
+          "assigned_truck",
+          "status",
+          "delivered_at",
+          "cancel_reason",
+          "history"
+        ],
+        "additionalProperties": false
+      },
+      "Consumption": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "label": {
+            "type": "string"
+          },
+          "liters": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "amount_lbp": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          },
+          "amount_usd": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]{1,2})?$",
+            "description": "Plain decimal string, at most 2 places; response values use fixed scale."
+          }
+        },
+        "required": [
+          "group_id",
+          "label",
+          "liters",
+          "amount_lbp",
+          "amount_usd"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

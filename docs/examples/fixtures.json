@@ -1,0 +1,125 @@
+{
+  "description": "Fictional deterministic tests only. Freeze clock at as_of_utc. Local seeders use equivalent relative dates.",
+  "as_of_utc": "2026-09-28T09:00:00Z",
+  "business_timezone": "Asia/Beirut",
+  "rate": {
+    "base": "USD",
+    "quote": "LBP",
+    "rate": "89500.00000000",
+    "source": "fixture",
+    "effective_at": "2026-09-28T00:00:00Z",
+    "expires_at": "2026-10-01T00:00:00Z"
+  },
+  "prices": [
+    {
+      "product_code": "DIESEL",
+      "price_lbp": "80000.0000",
+      "effective_from": "2026-09-01T00:00:00Z"
+    },
+    {
+      "product_code": "ULP95",
+      "price_lbp": "85000.0000",
+      "effective_from": "2026-09-01T00:00:00Z"
+    },
+    {
+      "product_code": "ULP98",
+      "price_lbp": "88000.0000",
+      "effective_from": "2026-09-01T00:00:00Z"
+    }
+  ],
+  "accounts": [
+    {
+      "email": "admin@fleetfuel.test",
+      "role": "admin"
+    },
+    {
+      "email": "manager.atlas@fleetfuel.test",
+      "role": "company_manager",
+      "company": "Atlas Logistics"
+    },
+    {
+      "email": "manager.cedar@fleetfuel.test",
+      "role": "company_manager",
+      "company": "Cedar Catering"
+    },
+    {
+      "email": "operator.beirut@fleetfuel.test",
+      "role": "station_operator",
+      "station": "Harbor Demo Station"
+    },
+    {
+      "email": "operator.tripoli@fleetfuel.test",
+      "role": "station_operator",
+      "station": "North Demo Station"
+    }
+  ],
+  "cards": [
+    {
+      "card_no": "FF-ATLAS-001",
+      "company": "Atlas Logistics",
+      "status": "active",
+      "fuel_type": "diesel",
+      "monthly_limit_l": "100.00",
+      "monthly_limit_usd": "100.00",
+      "tank_capacity_l": "60.00",
+      "used_l": "0.00",
+      "used_usd": "0.00"
+    },
+    {
+      "card_no": "FF-ATLAS-BLOCKED",
+      "company": "Atlas Logistics",
+      "status": "blocked",
+      "fuel_type": "diesel",
+      "monthly_limit_l": "100.00",
+      "monthly_limit_usd": "100.00"
+    },
+    {
+      "card_no": "FF-ATLAS-TINY",
+      "company": "Atlas Logistics",
+      "status": "active",
+      "fuel_type": "diesel",
+      "monthly_limit_l": "5.00",
+      "monthly_limit_usd": "100.00"
+    },
+    {
+      "card_no": "FF-CEDAR-001",
+      "company": "Cedar Catering",
+      "status": "active",
+      "fuel_type": "diesel",
+      "monthly_limit_l": "100.00",
+      "monthly_limit_usd": "100.00"
+    }
+  ],
+  "purchase": {
+    "external_ref": "POS-DEMO-0001",
+    "card_no": "FF-ATLAS-001",
+    "product_code": "DIESEL",
+    "liters": "20.00",
+    "transacted_at": "2026-09-28T10:00:00+03:00",
+    "odometer_km": 45000
+  },
+  "expected": {
+    "first_status": 201,
+    "replay_status": 200,
+    "conflict_status": 409,
+    "amount_lbp": "1600000.00",
+    "amount_usd": "17.88",
+    "remaining_l": "80.00",
+    "remaining_usd": "82.12",
+    "ledger_rows": 1,
+    "quota_month": "2026-09-01"
+  },
+  "concurrency": {
+    "limit_l": "100.00",
+    "already_used_l": "80.00",
+    "parallel_volumes_l": [
+      "15.00",
+      "15.00"
+    ],
+    "expected_statuses": [
+      201,
+      403
+    ],
+    "expected_used_l": "95.00"
+  }
+}

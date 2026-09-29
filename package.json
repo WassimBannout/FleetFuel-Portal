@@ -1,0 +1,18 @@
+{
+    "$schema": "https://www.schemastore.org/package.json",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "vite build",
+        "dev": "vite"
+    },
+    "devDependencies": {
+        "laravel-vite-plugin": "^3.1",
+        "vite": "^8.0.0"
+    },
+    "dependencies": {
+        "@popperjs/core": "^2.11.8",
+        "bootstrap": "^5.3.8",
+        "jquery": "^4.0.0"
+    }
+}
