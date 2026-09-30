@@ -15,12 +15,13 @@ use Illuminate\Validation\Rule;
 trait ResolvesCompany
 {
     /**
+     * @param  bool  $jsonInteger  API bodies: accept a JSON integer only, not "3".
      * @return list<mixed>
      */
-    protected function companyRules(): array
+    protected function companyRules(bool $jsonInteger = false): array
     {
         return $this->actor()->isAdmin()
-            ? ['required', 'integer', Rule::exists('companies', 'id')->where('status', CompanyStatus::Active->value)]
+            ? ['required', $jsonInteger ? 'integer:strict' : 'integer', Rule::exists('companies', 'id')->where('status', CompanyStatus::Active->value)]
             : ['prohibited'];
     }
 

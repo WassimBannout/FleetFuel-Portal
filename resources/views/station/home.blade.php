@@ -40,8 +40,17 @@
   -H 'Authorization: Bearer YOUR-TOKEN' \
   -d '{"external_ref": "POS-0001", "card_no": "FF-ATLAS-001", "product_code": "DIESEL",
        "liters": "20.00", "transacted_at": "{{ now()->setTimezone(config('fleetfuel.business_timezone'))->format('Y-m-d\TH:i:sP') }}"}'</code></pre>
-    <p class="mb-0">
+    <p>
         Check a card before fuelling with <code>GET /api/v1/cards/{card_no}/balance</code>. Revoke the token with
         <code>DELETE /api/v1/auth/token</code>, sending it as <code>Authorization: Bearer …</code>.
+    </p>
+
+    <h2 class="h5 mt-4">POS simulator</h2>
+    <p class="mb-0">
+        The project's standalone simulator (<code>tools/pos-simulator</code>) plays a terminal through this API and
+        checks each answer: a purchase, an identical and a changed retry, a blocked card and an over-quota request.
+        From the project folder, with your credentials only in the environment:
+        <code>POS_EMAIL={{ $user->email }} POS_PASSWORD=… make simulate</code>.
+        Its README explains the options and how to prepare fresh cards for another run.
     </p>
 @endsection

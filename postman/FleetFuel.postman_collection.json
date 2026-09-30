@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "FleetFuel Portal — target MVP contract",
-    "description": "Prepared before implementation. Run against fresh local demo fixtures after M08 for the whole collection, or run completed folders after M06. Password/tokens belong in an untracked local environment. POS requests generate a current timestamp once, then reuse it for replay. See postman/README.md.",
+    "name": "FleetFuel Portal — API scenarios",
+    "description": "Scenario collection for the FleetFuel Portal API (fictional data). Folders 01, 02 and 05 run against the implemented API (M06); folder 03 needs M07 (deliveries) and folder 04 needs M08 (reports and CSV). Password and tokens belong only in your selected, untracked environment. The first purchase saves its generated payload; replay and conflict reuse it. See postman/README.md.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -79,7 +79,10 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Only active stations\", () => pm.expect(body.data.every((s) => s.is_active === true)).to.be.true);",
+                  "pm.test(\"Page metadata\", () => pm.expect(body.meta).to.have.keys(\"current_page\", \"per_page\", \"last_page\", \"total\"));"
                 ]
               }
             }
@@ -113,7 +116,10 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const diesel = pm.response.json().data.find((row) => row.product_code === \"DIESEL\");",
+                  "pm.test(\"DIESEL has an LBP price as a 4-decimal string\", () => pm.expect(diesel.unit_price_lbp).to.match(/^\\d+\\.\\d{4}$/));",
+                  "pm.test(\"Indicative USD price and rate provenance\", () => { pm.expect(diesel.indicative_unit_price_usd).to.match(/^\\d+\\.\\d{4}$/); pm.expect([\"fixture\", \"provider\", \"manual\"]).to.include(diesel.rate_source); });"
                 ]
               }
             }
@@ -147,7 +153,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const cents = (s) => { const [whole, fraction = \"\"] = String(s).split(\".\"); return parseInt(whole, 10) * 100 + parseInt((fraction + \"00\").slice(0, 2), 10); };",
+                  "const balance = pm.response.json().data;",
+                  "pm.test(\"Card is active\", () => pm.expect(balance.status).to.eql(\"active\"));",
+                  "pm.test(\"At least 20.00 L left (otherwise prepare fresh cards, see README)\", () => pm.expect(balance.remaining_l === null || cents(balance.remaining_l) >= 2000).to.be.true);",
+                  "pm.environment.set(\"initial_used_l\", balance.used_l);",
+                  "pm.environment.set(\"initial_remaining_l\", balance.remaining_l === null ? \"\" : balance.remaining_l);"
                 ]
               }
             }
@@ -180,7 +192,7 @@
             "url": "{{base_url}}/transactions",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"external_ref\": \"{{external_ref}}\",\n  \"card_no\": \"{{card_no}}\",\n  \"product_code\": \"DIESEL\",\n  \"liters\": \"20.00\",\n  \"transacted_at\": \"{{event_time}}\",\n  \"odometer_km\": 45000\n}",
+              "raw": "{{purchase_payload}}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -194,8 +206,17 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "// A new reference and the current time, saved once; replay and conflict reuse this exact payload.",
                   "pm.environment.set(\"external_ref\", \"PM-\" + Date.now() + \"-\" + Math.floor(Math.random() * 100000));",
-                  "pm.environment.set(\"event_time\", new Date(Date.now() - 1000).toISOString().replace(/\\.\\d{3}Z$/, \"Z\"));"
+                  "pm.environment.set(\"event_time\", new Date(Date.now() - 2000).toISOString().replace(/\\.\\d{3}Z$/, \"Z\"));",
+                  "pm.environment.set(\"purchase_payload\", JSON.stringify({",
+                  "  external_ref: pm.environment.get(\"external_ref\"),",
+                  "  card_no: pm.environment.get(\"card_no\"),",
+                  "  product_code: \"DIESEL\",",
+                  "  liters: \"20.00\",",
+                  "  transacted_at: pm.environment.get(\"event_time\"),",
+                  "  odometer_km: 45000",
+                  "}));"
                 ]
               }
             },
@@ -205,11 +226,12 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
-                  "const data = pm.response.json().data;",
-                  "pm.environment.set(\"transaction_id\", data.id);",
-                  "pm.environment.set(\"original_transaction\", JSON.stringify(data));",
-                  "pm.test(\"Volume is a decimal string\", () => pm.expect(data.liters).to.eql(\"20.00\"));",
-                  "pm.test(\"Money is a string\", () => pm.expect(data.amount_usd).to.be.a(\"string\"));"
+                  "const purchase = pm.response.json().data;",
+                  "pm.environment.set(\"transaction_id\", purchase.id);",
+                  "pm.environment.set(\"original_transaction\", JSON.stringify(purchase));",
+                  "pm.test(\"Location header names the purchase\", () => pm.expect(pm.response.headers.get(\"Location\")).to.eql(\"/api/v1/transactions/\" + purchase.id));",
+                  "pm.test(\"Volume is a decimal string\", () => pm.expect(purchase.liters).to.eql(\"20.00\"));",
+                  "pm.test(\"Money is a string\", () => pm.expect(purchase.amount_usd).to.be.a(\"string\"));"
                 ]
               }
             }
@@ -242,7 +264,7 @@
             "url": "{{base_url}}/transactions",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"external_ref\": \"{{external_ref}}\",\n  \"card_no\": \"{{card_no}}\",\n  \"product_code\": \"DIESEL\",\n  \"liters\": \"20.00\",\n  \"transacted_at\": \"{{event_time}}\",\n  \"odometer_km\": 45000\n}",
+              "raw": "{{purchase_payload}}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -291,7 +313,7 @@
             "url": "{{base_url}}/transactions",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"external_ref\": \"{{external_ref}}\",\n  \"card_no\": \"{{card_no}}\",\n  \"product_code\": \"DIESEL\",\n  \"liters\": \"21.00\",\n  \"transacted_at\": \"{{event_time}}\",\n  \"odometer_km\": 45000\n}",
+              "raw": "{{conflict_payload}}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -300,6 +322,18 @@
             }
           },
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// The saved payload with only the liters changed.",
+                  "const payload = JSON.parse(pm.environment.get(\"purchase_payload\"));",
+                  "payload.liters = \"21.00\";",
+                  "pm.variables.set(\"conflict_payload\", JSON.stringify(payload));"
+                ]
+              }
+            },
             {
               "listen": "test",
               "script": {
@@ -402,7 +436,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
-                  "pm.test(\"Quota code\", () => pm.expect(pm.response.json().error.code).to.eql(\"quota_exceeded\"));"
+                  "pm.test(\"Quota code\", () => pm.expect(pm.response.json().error.code).to.eql(\"quota_exceeded\"));",
+                  "pm.test(\"Liter limit\", () => pm.expect(pm.response.json().error.details.dimension).to.eql(\"liters\"));"
                 ]
               }
             }
@@ -472,8 +507,139 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
-                  "pm.test(\"Exactly one 20-liter debit on fresh fixture\", () => pm.expect(pm.response.json().data.used_l).to.eql(\"20.00\"));",
-                  "pm.test(\"Remaining liters\", () => pm.expect(pm.response.json().data.remaining_l).to.eql(\"80.00\"));"
+                  "const cents = (s) => { const [whole, fraction = \"\"] = String(s).split(\".\"); return parseInt(whole, 10) * 100 + parseInt((fraction + \"00\").slice(0, 2), 10); };",
+                  "const balance = pm.response.json().data;",
+                  "pm.test(\"Exactly one 20.00 L debit (replay and declines charged nothing)\", () => pm.expect(cents(balance.used_l) - cents(pm.environment.get(\"initial_used_l\"))).to.eql(2000));",
+                  "pm.test(\"Remaining liters went down by 20.00\", () => { const before = pm.environment.get(\"initial_remaining_l\"); if (before !== \"\") { pm.expect(cents(before) - cents(balance.remaining_l)).to.eql(2000); } });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Station field refused",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{station_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"external_ref\": \"{{external_ref}}-STATION\",\n  \"card_no\": \"{{card_no}}\",\n  \"product_code\": \"DIESEL\",\n  \"liters\": \"20.00\",\n  \"transacted_at\": \"{{event_time}}\",\n  \"station_id\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/transactions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 422\", function () { pm.response.to.have.status(422); });",
+                  "pm.test(\"station_id is not accepted\", () => pm.expect(pm.response.json().error.details).to.have.property(\"station_id\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Station cannot list vehicles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{station_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/vehicles"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Station cannot change a card",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{station_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"blocked\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/cards/1"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });"
                 ]
               }
             }
@@ -582,7 +748,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const ids = pm.response.json().data.map((vehicle) => vehicle.company_id);",
+                  "pm.test(\"One company only\", () => pm.expect(new Set(ids).size).to.be.at.most(1));"
                 ]
               }
             }
@@ -616,7 +784,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const ids = pm.response.json().data.map((driver) => driver.company_id);",
+                  "pm.test(\"One company only\", () => pm.expect(new Set(ids).size).to.be.at.most(1));"
                 ]
               }
             }
@@ -652,6 +822,41 @@
                 "exec": [
                   "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
                   "pm.test(\"Filtered totals exist\", () => pm.expect(pm.response.json().meta.totals).to.have.keys(\"liters\", \"amount_lbp\", \"amount_usd\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager cannot choose a company",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/vehicles?company_id=1"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 422\", function () { pm.response.to.have.status(422); });",
+                  "pm.test(\"company_id is refused\", () => pm.expect(pm.response.json().error.details).to.have.property(\"company_id\"));"
                 ]
               }
             }
@@ -1061,6 +1266,40 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoked manager token rejected",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/vehicles"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });"
                 ]
               }
             }

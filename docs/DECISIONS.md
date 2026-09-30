@@ -214,4 +214,49 @@ These are implementation defaults chosen to make the research actionable. They a
   - Every wait is bounded (20 s), and workers are stopped in `tearDown`.
 - Laravel 12+ `Schema::getTableListing()` lists every schema the MySQL user can see. `MigrationsTest` and the concurrency cleanup now pass the current database explicitly; the second test database had exposed this.
 
+2026-09-30 (M06): API completeness, simulator and contract checks within D04, D12 and D16. No product rule changed. The API contract gained an "Implemented behavior (M06)" section; the points below fill in details the specs leave open, plus one intentional contract addition.
+
+- Contract addition: each price-list row carries `rate_source` (`fixture`, `provider` or `manual`), added to the OpenAPI `Price` schema as required. Reason: the USD figure is indicative, so a client should know whether it rests on a synthetic demo rate, a provider observation or an admin override, as the purchase resource already tells it.
+- `openapi.json` now marks each operation with:
+  - `x-status` (`implemented` or `planned`) and `x-milestone`;
+  - `x-abilities`, the token ability the route requires;
+  - `x-roles`, where the route restricts roles.
+  
+  A test compares these with the real route middleware. Delivery (M07) and report/export (M08) operations stay documented as `planned` and unrouted.
+- Validation of the document: the official OpenAPI 3.1 JSON Schema (2022-10-07), stored unmodified in `tests/Fixtures/openapi/`, checked with the dev dependency `opis/json-schema` 2.6.
+  - opis resolves the schema's `"$dynamicRef": "#meta"` to the document root. In this base schema, where no dialect overrides the anchor, the reference means `"$ref": "#/$defs/schema"`, so the test substitutes it in memory.
+  - Schema defaults are never written into validated data (`allowDefaults` off).
+  - A deliberately broken copy must fail with exactly the two injected errors.
+- Response validation: every response in the new API tests, and the M02/M05 responses in `OpenApiContractTest`, is checked for:
+  - a documented status;
+  - every documented header present;
+  - the body valid against the documented schema, with all `$ref`s followed.
+- Price list: `at` may be at most 366 days ago and not in the future, and inactive products are left out. Price is checked before rate, as for a purchase.
+- Stations: active only for every role, including admins, as the contract says. Ordered by name.
+- Card patch: `FuelCardService::applyChanges()` applies the sent limits and status under one card lock and one transaction.
+  - A limit that was not sent keeps its value as read under the lock.
+  - Limits may drop below usage without the web form's confirmation step, and are audited with `below_current_usage`.
+  - Archiving is not offered through the API (422), because it is final.
+  - A test forces the status step to fail after the limits were written and shows both roll back.
+- Vehicles and drivers: the API Form Requests extend the web ones and add unknown-field refusal and JSON-integer `company_id`/`odometer_km`. Lists are ordered by id and include inactive records.
+- Lists share one response builder (`RespondsWithPages`) and one request base (`PaginatedListRequest`), which the transaction list now uses too. Its output is unchanged.
+- Simulator (`tools/pos-simulator`): its own Composer project (Guzzle 7), HTTP only.
+  - Configuration and credentials come from environment variables only.
+  - Given an email and password instead of a token, it issues its own token and revokes it at the end.
+  - It checks balance and ledger before and after every scenario.
+  - It refuses to start a purchase that the card's remaining quota cannot cover and explains how to get fresh cards.
+  - It masks card numbers to their last four characters in its output.
+  - Exit codes: 0 passed, 1 unexpected outcome, 2 usage error.
+- Fresh fixtures: `php artisan demo:simulator-cards [--tag=]` adds three cards (`FF-SIM-<tag>-MAIN`/`-BLOCKED`/`-TINY`, diesel only, no vehicle or driver) to the demo company, each with a `card.created` audit row without a user.
+  - It is guarded like the demo seed (local/testing environment, `DEMO_MODE`), refuses a used tag, and never resets or deletes data.
+  - Reason: purchases are immutable and quota is monthly, so a rerun needs new cards, not a reset.
+- Simulator test: the new "Integration" PHPUnit suite serves the app with PHP's built-in server (Laravel's router script) on a dedicated database, `fleetfuel_test_integration`, and runs the simulator as a process. The committed-database setup moved from `PosConcurrencyTest` into the shared `UsesCommittedDatabase` trait. `make test` installs the simulator's locked dependencies first, and `make analyse` runs PHPStan level 6 on the simulator with its own `phpstan.neon` (Larastan's paths cover only the app).
+- Postman:
+  - Replay and conflict reuse the saved original payload.
+  - The balance check is relative to the balance read at the start of the run.
+  - Role and isolation calls were added.
+  - Validated with Newman 6 in the node container, not a real Postman app.
+  - Running it exposed a bug in the supplied collection: a top-level `const data` collides with the Postman sandbox's legacy `data` global. The variable is now `purchase`.
+- Found, not changed (outside M06): the demo seed's quota-cut scenario is audited as `fuel_card.limits_changed`, while `FuelCardService` writes `card.limits_changed`. The audit history therefore shows two spellings. Left for the M10 review; changing it would also change seeded history.
+
 Template: date, affected decision, old/new behavior, reason, spec/test updates, migration implications.

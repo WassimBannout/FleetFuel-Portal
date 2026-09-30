@@ -1,17 +1,57 @@
 # Postman contract scenarios
 
-These assets are prepared for the target API. They cannot pass before the matching application milestones are implemented. The OpenAPI contract covers all 19 specified operations; this collection focuses on demonstrable end-to-end scenarios, while application tests cover the full authorization/error matrix.
+`FleetFuel.postman_collection.json` walks through the API with fictional demo data. The OpenAPI file (`docs/api/openapi.json`) covers every operation. This collection focuses on demonstrable end-to-end scenarios; the PHPUnit suite covers the full authorization and error matrix.
 
-1. Complete M06 for folders 01/02; M07 for deliveries; M08 for reports/CSV.
-2. Start the local app and seed fresh dedicated simulator fixtures using the implemented, guarded fixture command. Keep unrelated demo/user data intact.
-3. Import `FleetFuel.postman_collection.json` and `local.postman_environment.json` into Postman.
-4. Duplicate the environment and set the local demo password from your app's local configuration. Select that environment. Set base_url if you changed the local port.
-5. Run folders in order. Token requests save the tokens only to your selected environment. The first purchase generates and saves a unique reference and timestamp; replay/conflict intentionally reuse them.
-6. Expect one 20.00 L accepted purchase, replay 200, conflict 409, blocked/quota declines 403, cross-tenant 404 and revoked-token 401. The remaining balance assertion assumes a fresh 100.00 L / zero-used fixture card.
-7. Run the final revocation folder after the scenarios. To repeat, use freshly prepared dedicated fixture cards or intentionally adjust the assertions for known starting usage. A new external reference alone does not reset quota.
+| Folder | Needs | Content |
+| --- | --- | --- |
+| 01 — POS scenario | M06 (done) | Station token, stations, prices, balance, one 20.00 L purchase, identical replay (200), conflicting retry (409), blocked card and over-quota declines (403), detail, balance after, refused `station_id` (422), station refused on vehicles and card changes (403), missing token (401) |
+| 02 — Manager access | M06 (done) | Manager token, own vehicles, drivers and ledger, `company_id` refused (422), other company's card hidden (404), manager cannot post a purchase (403) |
+| 03 — Delivery scenario | M07 | Not implemented yet |
+| 04 — Reports and export | M08 | Not implemented yet |
+| 05 — Revoke tokens | M06 (done) | Both tokens revoked (204), then refused (401) |
 
-Keep exported real environments in files ending `.local.json` inside this directory (ignored by Git), for example `my-environment.local.json`. The committed template must retain blank password/token fields. Never export live tokens into the tracked collection/template.
+## Running folders 01, 02 and 05
 
-During M06 validate with an available Postman-compatible runner if practical, or record a manual Collection Runner result. Do not claim a green run solely because the collection JSON parses. Update the API/spec if the final implementation intentionally changes a field, preserving acceptance behavior.
+1. Start the stack (`make up`).
+2. Use fresh dedicated cards. On a newly seeded demo, the default `FF-ATLAS-001`, `FF-ATLAS-BLOCKED` and `FF-ATLAS-TINY` are fresh. Otherwise add a new set; this never resets or deletes other data:
 
-The transaction timestamp and future delivery window are generated at run time with whole-second UTC strings. Historic example dates in docs are only for frozen-time tests. The external FX provider is not contacted by this collection; use fixture mode for deterministic local results.
+   ```bash
+   docker compose exec app php artisan demo:simulator-cards
+   ```
+
+   It prints the three new card numbers (`FF-SIM-<tag>-MAIN`, `-BLOCKED`, `-TINY`).
+3. Import `FleetFuel.postman_collection.json` and `local.postman_environment.json`.
+4. Duplicate the environment and fill in:
+   - `demo_password`: the `DEMO_PASSWORD` value from your `.env`;
+   - `card_no`, `blocked_card_no` and `tiny_card_no`: set them if you created new cards;
+   - `base_url`: change it only if you changed the local port.
+
+   Select that environment.
+5. Run folders 01, 02 and 05, in that order.
+   - Token requests save the tokens in your selected environment only.
+   - The first purchase generates a unique reference and a current timestamp and saves the whole payload as `purchase_payload`.
+   - Replay sends that saved payload unchanged. Conflict sends it with only the liters changed.
+
+Expected result: one accepted 20.00 L purchase, replay 200, conflict 409, blocked and quota declines 403, cross-tenant 404, validation 422, wrong role 403, and 401 without a token or after revocation. The balance check compares against the balance read at the start of the run: usage must rise by exactly 20.00 L.
+
+The same run from the command line uses [Newman](https://www.npmjs.com/package/newman), Postman's official runner, inside the project's node container, so no Node install is needed. The password stays in an environment variable and nothing is exported to a file:
+
+```bash
+DP="$(sed -n 's/^DEMO_PASSWORD=//p' .env)" docker compose run --rm --no-deps -e DP node sh -c \
+  'npx --yes newman@6 run postman/FleetFuel.postman_collection.json -e postman/local.postman_environment.json \
+     --folder "01 — POS scenario (M06)" --folder "02 — Manager access (M06)" --folder "05 — Revoke tokens" \
+     --env-var base_url=http://web/api/v1 --env-var "demo_password=$DP" \
+     --env-var card_no=FF-SIM-XXXX-MAIN --env-var blocked_card_no=FF-SIM-XXXX-BLOCKED --env-var tiny_card_no=FF-SIM-XXXX-TINY'
+```
+
+Replace `XXXX` with the tag printed by `demo:simulator-cards`.
+
+## Running it again
+
+A purchase is never undone, and quota counts per Beirut calendar month. Each run uses 20.00 L of the main card's 100.00 L limit. The "Initial card balance" request fails once less than 20.00 L is left. A new external reference alone does not reset quota: prepare fresh cards (step 2) instead of changing assertions.
+
+## Secrets
+
+Keep exported environments in files ending `.local.json` inside this directory, for example `my-environment.local.json`. Git ignores them. The committed template keeps its password and token fields blank. Never export live tokens into the tracked collection or template.
+
+Timestamps are generated at run time as whole-second UTC strings; the historic dates in the docs are only for frozen-time tests. The collection never contacts the external FX provider. Use fixture mode (`EXCHANGE_RATE_MODE=fixture`, the default) for deterministic local results.

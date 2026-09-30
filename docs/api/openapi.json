@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "FleetFuel Portal API — target contract",
-    "version": "0.1.0",
-    "description": "Implementation handoff. No server exists yet. Validate against implementation in M06–M08. Business details: docs/04-BUSINESS-RULES.md and docs/05-API-CONTRACT.md."
+    "title": "FleetFuel Portal API",
+    "version": "0.6.0",
+    "description": "REST API of the FleetFuel Portal, a fictional portfolio project. Operations with x-status \"implemented\" are served and checked against real responses by tests/Feature/Api/OpenApiContractTest.php and the per-endpoint API tests; x-abilities and x-roles are compared with the route middleware. Operations with x-status \"planned\" are not routed yet (deliveries in M07, reports and exports in M08). Business details: docs/04-BUSINESS-RULES.md and docs/05-API-CONTRACT.md."
   },
   "servers": [
     {
@@ -21,6 +21,9 @@
       "post": {
         "operationId": "issueToken",
         "summary": "Issue a role-scoped 24-hour token",
+        "x-status": "implemented",
+        "x-milestone": "M02",
+        "x-abilities": [],
         "responses": {
           "201": {
             "description": "Token issued once.",
@@ -135,6 +138,9 @@
       "delete": {
         "operationId": "revokeToken",
         "summary": "Revoke current bearer token",
+        "x-status": "implemented",
+        "x-milestone": "M02",
+        "x-abilities": [],
         "responses": {
           "204": {
             "description": "Revoked; empty body."
@@ -224,6 +230,12 @@
       "get": {
         "operationId": "listStations",
         "summary": "List active stations",
+        "description": "Active stations only, for every role, ordered by name. Unknown query parameters are 422.",
+        "x-status": "implemented",
+        "x-milestone": "M06",
+        "x-abilities": [
+          "reference:read"
+        ],
         "responses": {
           "200": {
             "description": "Success",
@@ -345,8 +357,10 @@
             "name": "governorate",
             "in": "query",
             "schema": {
-              "type": "string"
-            }
+              "type": "string",
+              "maxLength": 80
+            },
+            "description": "Exact governorate name, for example Beirut."
           }
         ]
       }
@@ -355,6 +369,12 @@
       "get": {
         "operationId": "listPrices",
         "summary": "Resolve active product prices at an instant",
+        "description": "Each active product's LBP price per liter at the instant and an indicative USD price at the exchange rate in effect then (display only; a purchase converts its rounded LBP amount). A missing price is 422 price_unavailable; a missing or expired rate is 503 rate_unavailable. Nothing is ever shown at a zero or guessed value.",
+        "x-status": "implemented",
+        "x-milestone": "M06",
+        "x-abilities": [
+          "reference:read"
+        ],
         "responses": {
           "200": {
             "description": "Success",
@@ -473,9 +493,9 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "format": "date-time",
-              "description": "Offset-bearing ISO timestamp, whole seconds. Responses use UTC Z."
-            }
+              "format": "date-time"
+            },
+            "description": "Offset-bearing ISO timestamp with whole seconds, at most 366 days ago and not in the future. Defaults to now."
           }
         ]
       }
@@ -484,6 +504,14 @@
       "post": {
         "operationId": "createTransaction",
         "summary": "Station-only atomic POS ingestion",
+        "x-status": "implemented",
+        "x-milestone": "M05",
+        "x-abilities": [
+          "transactions:create"
+        ],
+        "x-roles": [
+          "station_operator"
+        ],
         "responses": {
           "200": {
             "description": "Exact canonical replay; no second spend.",
@@ -653,6 +681,11 @@
       "get": {
         "operationId": "listTransactions",
         "summary": "List scoped ledger; totals cover the whole filter",
+        "x-status": "implemented",
+        "x-milestone": "M05",
+        "x-abilities": [
+          "transactions:read"
+        ],
         "responses": {
           "200": {
             "description": "Success",
@@ -796,6 +829,11 @@
       "get": {
         "operationId": "showTransaction",
         "summary": "Read scoped immutable transaction",
+        "x-status": "implemented",
+        "x-milestone": "M05",
+        "x-abilities": [
+          "transactions:read"
+        ],
         "responses": {
           "200": {
             "description": "Success",
@@ -912,6 +950,11 @@
       "get": {
         "operationId": "cardBalance",
         "summary": "Read minimal current-limit balance for POS",
+        "x-status": "implemented",
+        "x-milestone": "M05",
+        "x-abilities": [
+          "cards:read"
+        ],
         "responses": {
           "200": {
             "description": "Success",
@@ -1038,6 +1081,16 @@
       "patch": {
         "operationId": "updateCard",
         "summary": "Admin or own manager updates quotas/status",
+        "description": "A nonempty subset of monthly_limit_l, monthly_limit_usd (decimal strings, null = unlimited) and status (active or blocked), applied together under the card lock and audited. A limit may drop below this month's usage. Ownership, assignment and card number cannot change here (422). Archived cards are final: 409 invalid_transition. An inactive company's limits cannot change and its cards cannot be unblocked: 403 company_inactive. Another company's card is 404.",
+        "x-status": "implemented",
+        "x-milestone": "M06",
+        "x-abilities": [
+          "cards:write"
+        ],
+        "x-roles": [
+          "admin",
+          "company_manager"
+        ],
         "responses": {
           "200": {
             "description": "Success",
@@ -1099,7 +1152,7 @@
             }
           },
           "409": {
-            "description": "Card state does not permit change.",
+            "description": "invalid_transition: archived cards are final.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1174,6 +1227,16 @@
       "get": {
         "operationId": "listVehicles",
         "summary": "List tenant-scoped vehicles",
+        "description": "Admin: every company, optionally company_id. Manager: own company; company_id is refused (422). Ordered by id; inactive vehicles included.",
+        "x-status": "implemented",
+        "x-milestone": "M06",
+        "x-abilities": [
+          "fleet:read"
+        ],
+        "x-roles": [
+          "admin",
+          "company_manager"
+        ],
         "responses": {
           "200": {
             "description": "Success",
@@ -1299,6 +1362,16 @@
       "post": {
         "operationId": "createVehicle",
         "summary": "Create vehicle in allowed company",
+        "description": "Admin must send company_id (an active company); a manager must omit it. The plate is normalized to upper case and must be unique. odometer_km is a JSON integer or null. An inactive company is 403 company_inactive.",
+        "x-status": "implemented",
+        "x-milestone": "M06",
+        "x-abilities": [
+          "fleet:write"
+        ],
+        "x-roles": [
+          "admin",
+          "company_manager"
+        ],
         "responses": {
           "201": {
             "description": "Success",
@@ -1414,6 +1487,16 @@
       "get": {
         "operationId": "listDrivers",
         "summary": "List tenant-scoped drivers",
+        "description": "Admin: every company, optionally company_id. Manager: own company; company_id is refused (422). Ordered by id; inactive drivers included.",
+        "x-status": "implemented",
+        "x-milestone": "M06",
+        "x-abilities": [
+          "fleet:read"
+        ],
+        "x-roles": [
+          "admin",
+          "company_manager"
+        ],
         "responses": {
           "200": {
             "description": "Success",
@@ -1539,6 +1622,16 @@
       "post": {
         "operationId": "createDriver",
         "summary": "Create driver in allowed company",
+        "description": "Admin must send company_id (an active company); a manager must omit it. license_no is normalized to upper case and unique within the company. An inactive company is 403 company_inactive.",
+        "x-status": "implemented",
+        "x-milestone": "M06",
+        "x-abilities": [
+          "fleet:write"
+        ],
+        "x-roles": [
+          "admin",
+          "company_manager"
+        ],
         "responses": {
           "201": {
             "description": "Success",
@@ -1654,6 +1747,15 @@
       "get": {
         "operationId": "listDeliveries",
         "summary": "List own-company or admin delivery orders",
+        "x-status": "planned",
+        "x-milestone": "M07",
+        "x-abilities": [
+          "deliveries:read"
+        ],
+        "x-roles": [
+          "admin",
+          "company_manager"
+        ],
         "responses": {
           "200": {
             "description": "Success",
@@ -1793,6 +1895,15 @@
       "post": {
         "operationId": "createDelivery",
         "summary": "Create pending diesel delivery with initial history",
+        "x-status": "planned",
+        "x-milestone": "M07",
+        "x-abilities": [
+          "deliveries:write"
+        ],
+        "x-roles": [
+          "admin",
+          "company_manager"
+        ],
         "responses": {
           "201": {
             "description": "Success",
@@ -1908,6 +2019,15 @@
       "get": {
         "operationId": "showDelivery",
         "summary": "Read scoped delivery and history",
+        "x-status": "planned",
+        "x-milestone": "M07",
+        "x-abilities": [
+          "deliveries:read"
+        ],
+        "x-roles": [
+          "admin",
+          "company_manager"
+        ],
         "responses": {
           "200": {
             "description": "Success",
@@ -2024,6 +2144,13 @@
       "patch": {
         "operationId": "transitionDelivery",
         "summary": "Advance lifecycle or cancel own pending order",
+        "x-status": "planned",
+        "x-milestone": "M07",
+        "x-abilities": [],
+        "x-roles": [
+          "admin",
+          "company_manager"
+        ],
         "responses": {
           "200": {
             "description": "Success",
@@ -2161,6 +2288,15 @@
       "get": {
         "operationId": "consumptionReport",
         "summary": "Tenant-scoped sums of immutable snapshots",
+        "x-status": "planned",
+        "x-milestone": "M08",
+        "x-abilities": [
+          "reports:read"
+        ],
+        "x-roles": [
+          "admin",
+          "company_manager"
+        ],
         "responses": {
           "200": {
             "description": "Success",
@@ -2293,6 +2429,15 @@
       "get": {
         "operationId": "exportTransactions",
         "summary": "Export all scoped/filter-matched rows, with safe CSV cells",
+        "x-status": "planned",
+        "x-milestone": "M08",
+        "x-abilities": [
+          "exports:read"
+        ],
+        "x-roles": [
+          "admin",
+          "company_manager"
+        ],
         "responses": {
           "200": {
             "description": "CSV with specified columns, including header. Tenant-scoped, formula-safe, streamed.",
@@ -2668,6 +2813,15 @@
             "type": "string",
             "format": "date-time",
             "description": "Offset-bearing ISO timestamp, whole seconds. Responses use UTC Z."
+          },
+          "rate_source": {
+            "type": "string",
+            "enum": [
+              "fixture",
+              "provider",
+              "manual"
+            ],
+            "description": "Where the rate came from; fixture rates are synthetic demo values."
           }
         },
         "required": [
@@ -2676,7 +2830,8 @@
           "unit_price_lbp",
           "indicative_unit_price_usd",
           "effective_from",
-          "rate_effective_at"
+          "rate_effective_at",
+          "rate_source"
         ],
         "additionalProperties": false
       },

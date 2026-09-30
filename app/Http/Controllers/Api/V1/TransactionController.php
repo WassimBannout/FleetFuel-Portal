@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Http\Controllers\Api\V1\Concerns\RespondsWithPages;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\ListTransactionsRequest;
 use App\Http\Requests\Api\V1\StorePosTransactionRequest;
@@ -19,6 +20,8 @@ use Illuminate\Support\Facades\Gate;
  */
 class TransactionController extends Controller
 {
+    use RespondsWithPages;
+
     /**
      * 201 for a new purchase (with Location), 200 with
      * Idempotency-Replayed: true for an identical retry.
@@ -61,24 +64,11 @@ class TransactionController extends Controller
             ->paginate($request->perPage())
             ->withQueryString();
 
-        return response()->json([
-            'data' => TransactionResource::collection($page->getCollection())->resolve($request),
-            'links' => [
-                'first' => $page->url(1),
-                'last' => $page->url($page->lastPage()),
-                'prev' => $page->previousPageUrl(),
-                'next' => $page->nextPageUrl(),
-            ],
-            'meta' => [
-                'current_page' => $page->currentPage(),
-                'per_page' => $page->perPage(),
-                'last_page' => $page->lastPage(),
-                'total' => $page->total(),
-                'totals' => [
-                    'liters' => Decimal::normalize((string) ($totals->liters ?? '0')),
-                    'amount_lbp' => Decimal::normalize((string) ($totals->amount_lbp ?? '0')),
-                    'amount_usd' => Decimal::normalize((string) ($totals->amount_usd ?? '0')),
-                ],
+        return $this->pageResponse($page, TransactionResource::class, $request, [
+            'totals' => [
+                'liters' => Decimal::normalize((string) ($totals->liters ?? '0')),
+                'amount_lbp' => Decimal::normalize((string) ($totals->amount_lbp ?? '0')),
+                'amount_usd' => Decimal::normalize((string) ($totals->amount_usd ?? '0')),
             ],
         ]);
     }

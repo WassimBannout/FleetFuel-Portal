@@ -178,6 +178,38 @@ class FuelCardService
         });
     }
 
+    /**
+     * The API card patch: any of the two limits and the status, applied
+     * together or not at all, under one card lock. A limit that was not sent
+     * keeps its current value as read under that lock, so a concurrent edit
+     * of the other limit is never overwritten with a stale copy. Limits may
+     * drop below this month's usage (audited as such); the API has no
+     * confirmation step.
+     *
+     * @param  array{monthly_limit_l?: string|null, monthly_limit_usd?: string|null, status?: CardStatus}  $changes
+     */
+    public function applyChanges(FuelCard $card, array $changes, User $actor): FuelCard
+    {
+        return DB::transaction(function () use ($card, $changes, $actor): FuelCard {
+            $card = $this->lock($card);
+
+            if (array_key_exists('monthly_limit_l', $changes) || array_key_exists('monthly_limit_usd', $changes)) {
+                $card = $this->updateLimits(
+                    $card,
+                    array_key_exists('monthly_limit_l', $changes) ? $changes['monthly_limit_l'] : $card->monthly_limit_l,
+                    array_key_exists('monthly_limit_usd', $changes) ? $changes['monthly_limit_usd'] : $card->monthly_limit_usd,
+                    $actor,
+                );
+            }
+
+            if (isset($changes['status'])) {
+                $card = $this->changeStatus($card, $changes['status'], $actor);
+            }
+
+            return $card;
+        });
+    }
+
     /** Current limits against usage in the Beirut month containing $at (default: now). */
     public function balance(FuelCard $card, ?CarbonInterface $at = null): CardBalance
     {

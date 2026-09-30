@@ -1,0 +1,10 @@
+# Static analysis for the standalone simulator. `make analyse` runs it with
+# the main project's PHPStan, after installing the simulator's own
+# dependencies (Guzzle), which are loaded from its vendor directory.
+parameters:
+    level: 6
+    paths:
+        - src
+        - bin/pos-simulator
+    bootstrapFiles:
+        - vendor/autoload.php

@@ -94,6 +94,7 @@ The Composer container must run on the chosen PHP version with matching extensio
 | `make build` | Install locked frontend dependencies and compile production assets |
 | `make verify` | Run lint, static analysis, tests and build, fail if any fails |
 | `make logs` | Show useful service logs without dumping env/secrets |
+| `make simulate` | Added in M06: run the standalone POS simulator against the running stack; credentials only from `POS_*` environment variables |
 
 MySQL init must provision separate dev/test databases and grants without using root from the app. Tests must refuse a non-testing environment/database. Test reset operations may target only the dedicated test DB. Repeated setup must preserve APP_KEY, demo records and credentials. An explicit reset command, if added, must be clearly named, guarded and separate from setup.
 

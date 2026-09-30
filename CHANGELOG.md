@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- M06 API completeness and POS simulator:
+  - New endpoints:
+    - `GET /api/v1/stations` (active stations, governorate filter, paginated);
+    - `GET /api/v1/products/prices?at=` (LBP price per liter, indicative USD and rate provenance at an instant; 422/503 instead of guessing);
+    - `PATCH /api/v1/cards/{id}` (limits and block/unblock, atomic under the card lock, audited);
+    - `GET`/`POST` `/api/v1/vehicles` and `/api/v1/drivers` (tenant-scoped; the company is chosen by the server).
+  - `tools/pos-simulator`: a standalone PHP/Guzzle CLI with the scenarios success, replay, conflict, blocked, quota and all.
+    - Each scenario checks the HTTP answer and that exactly one charge, or none, happened.
+    - Credentials come from environment variables only.
+    - Exit code 0, 1 or 2. Run it with `make simulate`.
+  - `php artisan demo:simulator-cards`: adds fresh dedicated simulator cards for reruns without resetting any data.
+  - OpenAPI:
+    - validated against the official OpenAPI 3.1 schema;
+    - operations marked implemented or planned, with abilities and roles checked against the real routes;
+    - real responses validated against it in the tests;
+    - `rate_source` added to price rows.
+  - Postman: replay and conflict reuse the saved payload, relative balance checks, role and isolation calls. Folders 01, 02 and 05 ran green with Newman on fresh cards. A variable name that broke the supplied collection in the Postman sandbox was fixed.
+  - New "Integration" test suite: the simulator against the app served over real HTTP.
 - M05 POS transactions and atomic quotas:
   - `POST /api/v1/transactions`, for station operators only (with the `transactions:create` token ability):
     - 201 for a new purchase, 200 with `Idempotency-Replayed: true` for an identical retry, and 409 for a changed purchase under the same station reference;

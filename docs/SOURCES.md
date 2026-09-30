@@ -12,6 +12,10 @@ Checked on 2026-09-28. Package patches, CLI behavior and hosting offers may chan
 | [Laravel database documentation](https://laravel.com/docs/13.x/database) | Database transactions and SQL Server driver requirements |
 | [Laravel Breeze repository](https://github.com/laravel/breeze) | Inspect compatibility instead of blindly applying old scaffolding commands |
 | [ExchangeRate-API open endpoint](https://www.exchangerate-api.com/docs/free) | Keyless USD feed, daily update, caching, rate limits and attribution requirement |
+| [OpenAPI 3.1 JSON Schema, 2022-10-07](https://spec.openapis.org/oas/3.1/schema/2022-10-07) | Stored unmodified in `tests/Fixtures/openapi/` to validate `docs/api/openapi.json` (checked 2026-09-30; OpenAPI Initiative, Apache License 2.0) |
+| [opis/json-schema](https://opis.io/json-schema/) | JSON Schema 2020-12 validator (dev dependency) for the document and for real API responses |
+| [Newman](https://www.npmjs.com/package/newman) | Postman's command-line collection runner, used through `npx` for the recorded collection run |
+| [Guzzle](https://docs.guzzlephp.org/) | HTTP client of the standalone POS simulator |
 
 The exchange-rate provider requires a link on pages using its rates. Use the prescribed text **Rates By Exchange Rate API** linking to `https://www.exchangerate-api.com`. Cache responses and avoid publishing the provider's full rate feed. The open endpoint supplies latest observations; it is not a historical-data service. Historical demonstration records therefore need explicit synthetic fixtures, not fabricated historical downloads.
 

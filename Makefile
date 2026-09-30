@@ -20,7 +20,7 @@ NODE   := $(COMPOSE) run --rm --no-deps node
 CHECK_READY := $(COMPOSE) exec -T web wget -q -O /dev/null http://127.0.0.1/health \
 	|| { echo "Readiness check failed: http://localhost/health did not return 200 (see make logs)"; exit 1; }
 
-.PHONY: help setup up down test lint analyse build verify logs shell
+.PHONY: help setup up down test lint analyse build verify simulate logs shell
 
 help: ## List the available commands
 	@grep -E '^[a-z]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  make %-8s %s\n", $$1, $$2}'
@@ -49,13 +49,17 @@ down: ## Stop the stack; database volumes are kept
 	$(COMPOSE) --profile mail down --remove-orphans
 
 test: ## Run PHPUnit against the isolated fleetfuel_test MySQL database
+	@# The Integration suite runs the standalone POS simulator, so install its locked dependencies.
+	$(PHP) composer install --working-dir=tools/pos-simulator --no-interaction --quiet
 	$(PHP_DB) php artisan test
 
 lint: ## Check code style with Pint (no changes are written)
 	$(PHP) vendor/bin/pint --test
 
-analyse: ## Run PHPStan/Larastan static analysis
+analyse: ## Run PHPStan/Larastan static analysis (the app, then the POS simulator)
 	$(PHP) vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+	$(PHP) composer install --working-dir=tools/pos-simulator --no-interaction --quiet
+	$(PHP) vendor/bin/phpstan analyse -c tools/pos-simulator/phpstan.neon --memory-limit=1G --no-progress
 
 build: ## Install locked frontend dependencies and build production assets
 	$(NODE) sh -c 'npm ci && npm run build'
@@ -65,6 +69,16 @@ verify: ## Run lint, analyse, test and build; stops at the first failure
 	$(MAKE) analyse
 	$(MAKE) test
 	$(MAKE) build
+
+# The simulator reaches nginx as http://web inside the Compose network. Its
+# credentials are passed through from your shell environment only
+# (POS_TOKEN, or POS_EMAIL and POS_PASSWORD); see tools/pos-simulator/README.md.
+simulate: ## Run the POS simulator against the running stack (SCENARIO=all|success|replay|conflict|blocked|quota)
+	$(PHP) composer install --working-dir=tools/pos-simulator --no-interaction --quiet
+	$(COMPOSE) run --rm --no-deps -e POS_BASE_URL=$${POS_BASE_URL:-http://web/api/v1} \
+		-e POS_TOKEN -e POS_EMAIL -e POS_PASSWORD -e POS_CARD -e POS_BLOCKED_CARD -e POS_TINY_CARD \
+		-e POS_PRODUCT -e POS_LITERS -e POS_TIMEOUT \
+		app php tools/pos-simulator/bin/pos-simulator $(or $(SCENARIO),all)
 
 logs: ## Show recent service logs (the generated MySQL root password line is hidden)
 	@$(COMPOSE) logs --no-color --tail=100 app web scheduler mysql | grep -v 'GENERATED ROOT PASSWORD'

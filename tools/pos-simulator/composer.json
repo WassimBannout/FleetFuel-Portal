@@ -1,0 +1,23 @@
+{
+    "name": "fleetfuel/pos-simulator",
+    "description": "Standalone station POS simulator for the FleetFuel Portal API (fictional portfolio demo). It talks to the API over HTTP only.",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": "^8.3",
+        "ext-json": "*",
+        "guzzlehttp/guzzle": "^7.9"
+    },
+    "autoload": {
+        "psr-4": {
+            "FleetFuel\\PosSimulator\\": "src/"
+        }
+    },
+    "bin": [
+        "bin/pos-simulator"
+    ],
+    "config": {
+        "sort-packages": true,
+        "optimize-autoloader": true
+    }
+}

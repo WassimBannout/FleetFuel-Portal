@@ -2,7 +2,7 @@
 
 A Laravel/MySQL portfolio application, in progress, for corporate fuel cards, station POS transactions, diesel deliveries, and USD/LBP reports. All companies, people and prices are fictional.
 
-**Current status: M05 POS transactions done.** The Docker stack runs locally, with the constrained database schema and a deterministic demo seed. Sign-in, roles and company/station isolation work, and API tokens can be issued and revoked. Admins manage companies, stations and products; admins and managers manage vehicles, drivers and fuel cards, with audited quota and block controls. Admins publish LBP prices on an append-only timeline and monitor USD/LBP rates, which a daily `rates:sync` stores with bounded fallback and audited manual overrides. Stations submit fuel purchases through the API, where retries are safe and quotas hold under concurrent use. The POS simulator, deliveries and reports come in later milestones. See [docs/PROGRESS.md](docs/PROGRESS.md).
+**Current status: M06 API and POS simulator done.** The Docker stack runs locally, with the constrained database schema and a deterministic demo seed. Sign-in, roles and company/station isolation work, and API tokens can be issued and revoked. Admins manage companies, stations and products; admins and managers manage vehicles, drivers and fuel cards, with audited quota and block controls. Admins publish LBP prices on an append-only timeline and monitor USD/LBP rates, which a daily `rates:sync` stores with bounded fallback and audited manual overrides. Stations submit fuel purchases through the API, where retries are safe and quotas hold under concurrent use. The API also serves stations, prices, card quota and block changes, vehicles and drivers; its OpenAPI contract is validated against the real responses. A standalone POS simulator and a Postman collection exercise it end to end. Deliveries and reports come in later milestones. See [docs/PROGRESS.md](docs/PROGRESS.md).
 
 Start with [START_HERE.md](START_HERE.md) to continue the build in Claude Code. It contains the milestone order and resume instructions.
 
@@ -20,10 +20,11 @@ Then open <http://localhost:8080>. Readiness (app + database) is at `/health`; l
 | --- | --- |
 | `make setup` | Create `.env`/`.env.testing` only if absent (with generated local DB passwords), build the PHP image, install locked dependencies, create keys only if missing, migrate, seed an empty database, build assets, start the stack |
 | `make up` / `make down` | Start or stop the stack; `down` keeps the MySQL volume |
-| `make test` | PHPUnit against the separate `fleetfuel_test` MySQL database, plus the concurrency suite on `fleetfuel_test_concurrency` (overlapping PHP processes) |
-| `make lint` / `make analyse` | Pint style check / Larastan (PHPStan level 6) |
+| `make test` | PHPUnit against the separate `fleetfuel_test` MySQL database, plus the concurrency suite on `fleetfuel_test_concurrency` (overlapping PHP processes) and the simulator suite on `fleetfuel_test_integration` (the app over real HTTP) |
+| `make lint` / `make analyse` | Pint style check / Larastan (PHPStan level 6), then PHPStan level 6 for the POS simulator |
 | `make build` | `npm ci` and a production Vite build |
 | `make verify` | lint, analyse, test and build; stops at the first failure |
+| `make simulate` | Run the POS simulator against the running stack (`SCENARIO=all`, `success`, `replay`, `conflict`, `blocked` or `quota`); credentials from `POS_*` environment variables, see [tools/pos-simulator](tools/pos-simulator/README.md) |
 | `make logs` / `make shell` | Recent service logs / a shell in the app container |
 
 To run other Artisan commands: `docker compose exec app php artisan <command>`.
@@ -40,7 +41,7 @@ To run other Artisan commands: `docker compose exec app php artisan <command>`.
 | Station operator | operator.beirut@fleetfuel.test | Harbor Demo Station |
 | Station operator | operator.tripoli@fleetfuel.test | North Demo Station |
 
-Dates are relative to an "as of" clock (default: now). The POS simulator cards `FF-ATLAS-001`, `FF-ATLAS-BLOCKED`, `FF-ATLAS-TINY` and `FF-CEDAR-001` start with no usage. Dashboard history (32 purchases over the current and previous month) lives on the other cards. It includes:
+Dates are relative to an "as of" clock (default: now). The POS simulator cards `FF-ATLAS-001`, `FF-ATLAS-BLOCKED`, `FF-ATLAS-TINY` and `FF-CEDAR-001` start with no usage; `docker compose exec app php artisan demo:simulator-cards` adds a fresh set for another simulator or Postman run without touching other data. Dashboard history (32 purchases over the current and previous month) lives on the other cards. It includes:
 
 - a tank overfill;
 - two fills 20 minutes apart;
@@ -105,6 +106,31 @@ curl -X POST http://localhost:8080/api/v1/transactions \
 - `GET /api/v1/transactions` lists purchases within your scope (filters `from`/`to` as Beirut dates, `card`, `station_id`, `product_code`, admin-only `company_id`), with totals for the whole filter.
 - `GET /api/v1/cards/{card_no}/balance?month=YYYY-MM` shows usage and what remains under the card's current limits.
 - `docker compose exec app php artisan usage:reconcile` compares every monthly counter with the ledger. It changes nothing and exits 1 if anything differs.
+
+## Other API endpoints, simulator and Postman
+
+The full contract is [docs/api/openapi.json](docs/api/openapi.json) (OpenAPI 3.1). The tests validate it against the official schema, compare its routes, token abilities and roles with the real routes, and check real responses against it. [docs/05-API-CONTRACT.md](docs/05-API-CONTRACT.md) explains the rules in prose.
+
+| Endpoint | Who | What |
+| --- | --- | --- |
+| `GET /api/v1/stations` | every role | Active stations, `governorate` filter, paginated |
+| `GET /api/v1/products/prices?at=` | every role | Each active product's LBP price per liter, an indicative USD price and the rate's source, at an instant within the last 366 days (default now; write `+03:00` as `%2B03:00` in a URL) |
+| `PATCH /api/v1/cards/{id}` | admin, own company's manager | Any of `monthly_limit_l`, `monthly_limit_usd` (decimal strings, `null` = unlimited) and `status` (`active`/`blocked`), applied together and audited |
+| `GET`, `POST /api/v1/vehicles` and `/api/v1/drivers` | admin, own company's manager | Tenant-scoped lists; creation in your own company (admins must send `company_id`) |
+
+Status codes follow one pattern: 401 no or bad token, 403 wrong role, missing token ability or a business decline, 404 not found or another company's record, 409 a conflict with the current state, 422 invalid input, 429 too many requests (with `Retry-After`), 503 no valid exchange rate.
+
+**POS simulator.** `tools/pos-simulator` is a separate PHP program that plays a station terminal over HTTP only. It checks each answer and that the card was charged exactly once, or not at all. With the stack running:
+
+```bash
+export POS_EMAIL=operator.beirut@fleetfuel.test
+export POS_PASSWORD="$(sed -n 's/^DEMO_PASSWORD=//p' .env)"
+make simulate        # success, replay, conflict, blocked and quota; exit code 0 when all pass
+```
+
+Each successful run uses 20.00 L of the card's monthly quota. For another clean run, `demo:simulator-cards` adds fresh cards and prints the variables to set. See [tools/pos-simulator/README.md](tools/pos-simulator/README.md).
+
+**Postman.** Import `postman/FleetFuel.postman_collection.json` and `postman/local.postman_environment.json`, set the demo password in your own copy of the environment, and run folders 01, 02 and 05. [postman/README.md](postman/README.md) also shows the same run with Newman from the command line.
 
 ## Accounts and API tokens
 

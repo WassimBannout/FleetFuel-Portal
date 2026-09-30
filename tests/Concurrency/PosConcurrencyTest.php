@@ -23,11 +23,10 @@ use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Schema;
 use Symfony\Component\Process\Process;
 use Tests\Concerns\SubmitsPosRequests;
+use Tests\Concerns\UsesCommittedDatabase;
 use Tests\TestCase;
-use Tests\TestDatabaseGuard;
 use Throwable;
 
 /**
@@ -46,13 +45,12 @@ use Throwable;
 class PosConcurrencyTest extends TestCase
 {
     use SubmitsPosRequests;
+    use UsesCommittedDatabase;
 
     private const DATABASE = 'fleetfuel_test_concurrency';
 
     /** Seconds to wait for workers to line up before failing, so CI never hangs. */
     private const WAIT_SECONDS = 20;
-
-    private static bool $migrated = false;
 
     /** @var list<Process> */
     private array $workers = [];
@@ -63,7 +61,7 @@ class PosConcurrencyTest extends TestCase
     {
         parent::setUp();
 
-        $this->useConcurrencyDatabase();
+        $this->useCommittedDatabase(self::DATABASE);
         config(['fleetfuel.exchange_rates.mode' => 'fixture']);
 
         $this->jobDirectory = storage_path('framework/testing/pos-workers-'.bin2hex(random_bytes(4)));
@@ -338,35 +336,6 @@ class PosConcurrencyTest extends TestCase
     // ---------------------------------------------------------------------
 
     /**
-     * Point this test's connection at the dedicated database: created and
-     * migrated once, then emptied before each test (its rows are committed).
-     */
-    private function useConcurrencyDatabase(): void
-    {
-        DB::statement('CREATE DATABASE IF NOT EXISTS `'.self::DATABASE.'`');
-        TestDatabaseGuard::assertSafe('testing', 'mysql', self::DATABASE);
-
-        config(['database.connections.mysql.database' => self::DATABASE]);
-        DB::purge('mysql');
-
-        if (! self::$migrated) {
-            $this->artisan('migrate:fresh', ['--force' => true])->assertSuccessful();
-            self::$migrated = true;
-
-            return;
-        }
-
-        Schema::withoutForeignKeyConstraints(function (): void {
-            // Only this database's tables: the MySQL user can see other test databases too.
-            foreach (Schema::getTableListing(self::DATABASE, schemaQualified: false) as $table) {
-                if ($table !== 'migrations') {
-                    DB::table($table)->truncate();
-                }
-            }
-        });
-    }
-
-    /**
      * A committed world on the real clock: a company card on a diesel
      * vehicle (100 L, no USD limit), two stations with an operator and a
      * token each, DIESEL at 80000 LBP/L and a fixture rate from two hours ago.
@@ -455,15 +424,7 @@ class PosConcurrencyTest extends TestCase
         $file = $this->jobDirectory.'/job-'.count($this->workers).'.json';
         file_put_contents($file, json_encode($job, JSON_THROW_ON_ERROR));
 
-        $worker = new Process([PHP_BINARY, base_path('tests/Concurrency/pos-worker.php'), $file], base_path(), [
-            'APP_ENV' => 'testing',
-            'APP_CONFIG_CACHE' => base_path('bootstrap/cache/config.testing.php'),
-            'DB_DATABASE' => self::DATABASE,
-            'CACHE_STORE' => 'array',
-            'SESSION_DRIVER' => 'array',
-            'QUEUE_CONNECTION' => 'sync',
-            'EXCHANGE_RATE_MODE' => 'fixture',
-        ], null, 60);
+        $worker = new Process([PHP_BINARY, base_path('tests/Concurrency/pos-worker.php'), $file], base_path(), $this->childProcessEnvironment(self::DATABASE), null, 60);
 
         $worker->start();
 

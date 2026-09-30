@@ -1,6 +1,6 @@
 # REST API contract
 
-Base URL: `http://localhost:8080/api/v1` locally. Machine-readable contract: [openapi.json](api/openapi.json). It is the target contract until implementation verifies it. Keep it, Postman and this document synchronized whenever behavior changes.
+Base URL: `http://localhost:8080/api/v1` locally. Machine-readable contract: [openapi.json](api/openapi.json). Operations marked `x-status: implemented` there are served and checked against real responses by the test suite; `planned` operations (deliveries M07, reports and export M08) are not routed yet. Keep it, Postman and this document synchronized whenever behavior changes.
 
 ## Authentication and common conventions
 
@@ -175,6 +175,43 @@ Every response carries a server-generated `X-Request-Id` (a client-supplied valu
   - An admin looks up any card, a manager only their company's cards (another company's is 404), and a station operator any card, because cards work at every station.
   - The figures always use the card's **current** limits, also for the previous month.
   - The response names no company, vehicle or driver, and reserves nothing.
+
+## Implemented behavior (M06)
+
+`GET /stations`, `GET /products/prices`, `PATCH /cards/{id}`, and `GET`/`POST` on `/vehicles` and `/drivers` are live. Details the tables above leave open:
+
+- **Stations.**
+  - Only active stations are listed, for every role (admins see inactive ones on the web screens).
+  - Ordered by name. `governorate` is an exact match.
+- **Price list.**
+  - `at` must carry an offset and whole seconds, like every API timestamp.
+  - It may be at most 366 days ago and never in the future: future prices are on the web price timeline, and no rate observed today could convert them.
+  - In a query string, write a `+` offset as `%2B` (a bare `+` means a space) or use `Z`.
+  - Each row adds `rate_source` (`fixture`, `provider` or `manual`), so a client can tell a synthetic demo rate from a real one.
+  - As for a purchase, a missing price is checked before a missing rate: 422 `price_unavailable`, then 503 `rate_unavailable`.
+- **Card patch.**
+  - A limit sent as `null` means unlimited. A limit that is not sent keeps its value, read under the card lock, so a concurrent edit of the other limit is never overwritten.
+  - Limits and status are applied together in one transaction, or not at all.
+  - An unchanged value writes no audit row. Lowering a limit below this month's usage is allowed and audited with `below_current_usage: true`; the API has no confirmation step, unlike the web form.
+  - An empty body is 422 with `details.body`. Ownership, assignment or card-number fields are 422 "This field is not allowed". `status: archived` is 422: archiving stays a web action because it is final.
+  - An archived card is 409 `invalid_transition`.
+  - An inactive company: its limits cannot change and its cards cannot be unblocked (403 `company_inactive`); blocking still works.
+  - The response is the card itself (`Card`), not its balance.
+- **Vehicles and drivers.**
+  - Lists are ordered by id and include inactive records (`is_active`).
+  - `company_id`, as a filter or in a body, is for admins only. A manager's is refused (422) even when it names their own company.
+  - In bodies, `company_id` and `odometer_km` must be JSON integers. `"45000"` as a string is refused, as on `POST /transactions`.
+  - Plates are normalized to upper case with single spaces and must be unique. License numbers are upper-cased and unique within the company.
+  - An inactive company's fleet is read-only: creating is 403 `company_inactive`.
+  - There is no detail route, so a 201 has no `Location` header.
+- **Role before scope.** The role check (`role:admin,company_manager` or `role:station_operator`) and the token ability run before any record is looked up. A station operator asking for a card, vehicle or driver route gets 403, never a 404 that would reveal whether the record exists. After that, the tenant-scoped lookup makes another company's record 404.
+- **Contract checks.** `tests/Feature/Api/OpenApiContractTest.php` validates `openapi.json` against the official OpenAPI 3.1 schema. It also checks that the routes, their token abilities (`x-abilities`) and roles (`x-roles`) match the document exactly, and that planned operations are not routed. Every success and error response in the API tests is validated against the documented status, headers and schema.
+
+### Token abilities
+
+A token carries the abilities of its user's role (table above), chosen by the server at issue time. Each route requires one ability (`x-abilities` in `openapi.json`). A token without it is refused with 403 before anything else happens.
+
+Abilities only narrow access; they never widen it. The role check, the tenant scope and the policies still run, so even a hand-made token with every ability cannot make a manager see another company's card or a station operator change a quota.
 
 ## CSV contract
 

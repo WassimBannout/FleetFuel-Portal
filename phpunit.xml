@@ -16,6 +16,12 @@
         <testsuite name="Concurrency">
             <directory>tests/Concurrency</directory>
         </testsuite>
+        <!-- The standalone POS simulator (tools/pos-simulator) against the app
+             served over real HTTP by PHP's built-in server, on
+             fleetfuel_test_integration (T25). -->
+        <testsuite name="Integration">
+            <directory>tests/Integration</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>

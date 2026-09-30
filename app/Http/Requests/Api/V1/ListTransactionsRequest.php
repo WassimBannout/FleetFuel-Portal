@@ -3,12 +3,10 @@
 namespace App\Http\Requests\Api\V1;
 
 use App\Enums\ProductCode;
-use App\Http\Requests\Concerns\RejectsUnknownFields;
 use App\Models\FuelTransaction;
 use App\Models\User;
 use App\Support\BusinessMonth;
 use Carbon\CarbonImmutable;
-use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
@@ -18,12 +16,8 @@ use Illuminate\Validation\Validator;
  * defaulting to the current Beirut month. Only an admin may filter by
  * company; for everyone else ownership comes from the account.
  */
-class ListTransactionsRequest extends FormRequest
+class ListTransactionsRequest extends PaginatedListRequest
 {
-    use RejectsUnknownFields {
-        after as rejectUnknownFields;
-    }
-
     private const MAX_RANGE_DAYS = 366;
 
     public function authorize(): bool
@@ -46,8 +40,7 @@ class ListTransactionsRequest extends FormRequest
             'product_code' => ['nullable', 'string', Rule::enum(ProductCode::class)],
             // Refused for managers even when equal to their own company.
             'company_id' => $user instanceof User && $user->isAdmin() ? ['nullable', 'integer', 'min:1'] : ['prohibited'],
-            'page' => ['nullable', 'integer', 'min:1'],
-            'per_page' => ['nullable', 'integer', 'between:1,100'],
+            ...$this->paginationRules(),
         ];
     }
 
@@ -57,7 +50,7 @@ class ListTransactionsRequest extends FormRequest
     public function after(): array
     {
         return [
-            ...$this->rejectUnknownFields(),
+            ...parent::after(),
             function (Validator $validator): void {
                 $from = $this->input('from');
                 $to = $this->input('to');
@@ -98,10 +91,5 @@ class ListTransactionsRequest extends FormRequest
             BusinessMonth::startUtc($month),
             BusinessMonth::startUtc(CarbonImmutable::parse($month)->addMonthNoOverflow()->format('Y-m-d')),
         ];
-    }
-
-    public function perPage(): int
-    {
-        return (int) ($this->validated('per_page') ?? 25);
     }
 }

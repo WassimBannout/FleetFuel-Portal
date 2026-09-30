@@ -1,46 +1,57 @@
 # Progress and session handoff
 
-Updated: 2026-09-29
+Updated: 2026-09-30
 
 ## Current state
 
-- **M05 POS transactions and atomic quotas is DONE and verified locally on MySQL 8.4**, on top of M00–M04.
-  - `POST /api/v1/transactions` (station operators, `transactions:create`):
-    - replay 200, conflict 409 and created 201 on the unique `(station_id, external_ref)` key;
-    - the station always comes from the account;
-    - card lock, then the monthly counter lock;
-    - immutable price, rate and ownership snapshots, Beirut quota months, exact limits;
-    - the 72-hour window for new events only;
-    - bounded contention retries.
-  - Also live: `GET /api/v1/transactions` (scoped, filtered, paginated, whole-filter totals), `GET /api/v1/transactions/{id}` and `GET /api/v1/cards/{card_no}/balance`.
-  - `php artisan usage:reconcile` is a read-only check of counters against the ledger.
-- Dev database: the M01 demo, the M03 walkthrough records and the M04 rate rows, plus from M05:
-  - one purchase from the live walkthrough: transaction 33, `WALK-M05-001`, 20 L on `FF-ATLAS-H01` at Harbor Demo Station (now 190 of 400 L used this month);
-  - one API token, issued for the walkthrough and then revoked.
+- **M06 API completeness and POS simulator is DONE and verified locally on MySQL 8.4**, on top of M00–M05.
+  - New endpoints:
+    - `GET /api/v1/stations` and `GET /api/v1/products/prices?at=` (every role, `reference:read`);
+    - `PATCH /api/v1/cards/{id}` (admin and own manager, `cards:write`; limits and block/unblock under the card lock, atomic, audited);
+    - `GET`/`POST` `/api/v1/vehicles` and `/api/v1/drivers` (admin and own manager, `fleet:read`/`fleet:write`; the server chooses the company).
+  - `tools/pos-simulator`: a standalone PHP/Guzzle CLI (`make simulate`).
+    - Scenarios success, replay, conflict, blocked, quota and all; each checks the HTTP answer plus the balance and ledger before and after.
+    - Credentials come from environment variables only. Exit codes 0/1/2.
+  - `php artisan demo:simulator-cards [--tag=]` adds fresh dedicated simulator cards without resetting anything.
+  - `docs/api/openapi.json`:
+    - valid against the official OpenAPI 3.1 schema;
+    - its routes, token abilities and roles match the real routes;
+    - real responses are validated against it in the tests;
+    - delivery and report operations are marked `planned`.
+  - The Postman collection was updated. Folders 01, 02 and 05 ran green with Newman 6 on fresh cards.
+- Dev database: the M01 demo, the M03 walkthrough records, the M04 rate rows and M05's transaction 33, plus from M06:
+  - 9 cards from `demo:simulator-cards` (tags `M06`, `PM1`, `PM2`: `FF-SIM-<tag>-MAIN`/`-BLOCKED`/`-TINY`), each with a `card.created` audit row;
+  - 3 purchases of 20.00 L:
+    - 34, the simulator run on `FF-SIM-M06-MAIN`;
+    - 35, Newman run 1 on `FF-SIM-PM1-MAIN`;
+    - 36, Newman run 2 on `FF-SIM-PM2-MAIN`.
+  - Every token the simulator and Newman issued was revoked (none left with those device names).
 
-  The POS-simulator cards (`FF-ATLAS-001`, `FF-ATLAS-BLOCKED`, `FF-ATLAS-TINY`, `FF-CEDAR-001`) are still unused. `usage:reconcile` reports every counter matching.
-- The test MySQL server now also holds `fleetfuel_test_concurrency`, created by the Concurrency suite. It is covered by the existing test-user grant (`fleetfuel\_test%`).
-- Not built yet: the POS simulator, the other API endpoints and OpenAPI/Postman parity (M06), deliveries (M07), and reports (M08).
+  The seeded simulator cards `FF-ATLAS-001`, `FF-ATLAS-BLOCKED` and `FF-ATLAS-TINY` are still unused. `usage:reconcile` reports every counter matching.
+- The test MySQL server now also holds `fleetfuel_test_integration`, created by the new Integration suite. It is covered by the existing test-user grant (`fleetfuel\_test%`).
+- Not built yet: deliveries (M07), reports and CSV export (M08), UI polish (M09).
 - Local URL: <http://localhost:8080> (sign-in `/login`, readiness `/health`, liveness `/up`, API base `/api/v1`).
 - Git: branch `main` tracks `origin/main` (github.com/WassimBannout/FleetFuel-Portal).
-  - M04 is `6922807`. GitHub Actions run 36596673138 passed on it: Pint PASS on 211 files, Larastan OK, 349 tests / 2800 assertions, npm 0 vulnerabilities, Vite build OK, and the repeated-setup step passed.
-  - M05 is committed and pushed in the commit that contains this file. Its CI result had not been observed when this file was written.
+  - M05 is `a9bbcc5`. GitHub Actions run 36608901328 passed on it: Pint PASS on 230 files, Larastan OK, 441 tests / 3355 assertions (59.10 s), npm 0 vulnerabilities, Vite build OK, and the repeated-setup step passed.
+  - M06 is committed and pushed in the commit that contains this file. Its CI result had not been observed when this file was written.
 
 ## Next action
 
-Execute `prompts/06-api-tooling.md` (M06):
-- the reference endpoints (`GET /stations`, `GET /products/prices`);
-- `PATCH /cards/{id}`;
-- vehicle and driver `GET`/`POST`;
-- the standalone `tools/pos-simulator`;
-- OpenAPI and Postman validated against real responses (T24/T25).
+Execute `prompts/07-delivery-orders.md` (M07):
+- the scoped delivery API (`GET`/`POST /delivery-orders`, `GET /delivery-orders/{id}`, `PATCH /delivery-orders/{id}/status`) and the Blade UI;
+- a state service with the `expected_status` check;
+- history and audit written atomically;
+- the concurrent-transition test (T26–T28).
 
-Starting points from M05:
+Starting points from M06:
 
-- **Price preview:** `GET /products/prices?at=` can reuse `PriceResolver::findPrice()`/`findRate()` and `FuelAmounts::indicativeUnitPriceUsd()`.
-- **Card patch:** `PATCH /cards/{id}` must call `FuelCardService::updateLimits(..., allowBelowUsage: true)` and `changeStatus()`. Those already take the card lock, which the Concurrency suite shows serializing with ingestion. Declare `role:admin,company_manager` + `abilities:cards:write` on the route.
-- **Simulator scenarios:** the simulator cards are still fresh in the dev database. Postman and the simulator should generate a new `external_ref` and the current time for each new scenario, and reuse the saved payload for replay and conflict (docs/08-BUILD-PLAN.md).
-- **OpenAPI parity:** the list response is built explicitly to the OpenAPI `PageMeta` keys. Check that `openapi.json` and the real responses agree, including the decline `details` documented in docs/05 "Implemented behavior (M05)".
+- **Route parity:** the four delivery operations are in `openapi.json` with `x-status: planned`. Switching them to `implemented` makes `OpenApiContractTest` require routes whose `abilities:` and `role:` middleware match `x-abilities` and `x-roles` exactly.
+  - The status transition needs "admin with `deliveries:status`, or own manager with `deliveries:write` for cancellation only". Decide how to express that, for example the `ability:` (any-of) middleware plus a policy, and extend the parity check to read it.
+- **Reuse:**
+  - `RespondsWithPages`, `PaginatedListRequest`/`ListCompanyRecordsRequest`, `ChecksOpenApiContract` and `CallsApi` for the API and its tests;
+  - `UsesCommittedDatabase` and the worker pattern in `tests/Concurrency` for T28.
+- **Binding:** add a tenant-scoped route binding for the order in `AppServiceProvider::bindTenantScopedModels()`, as for `card`.
+- **Postman:** folder 03 already exists; enable it and add it to the Newman run (postman/README.md).
 
 ## Milestone ledger
 
@@ -52,7 +63,7 @@ Starting points from M05:
 | M03 Fleet CRUD | DONE | T04/T05/T07/T08 on real routes (MySQL): cross-company vehicle/driver IDs refused, card company immutable, used-card assignment locked, quota/block/deactivation audits with before/after values, operators 403, managers 404 on other companies' records, no delete routes (405), input escaped. Company → vehicle/driver → card and a blocked card walked through live. `make verify`: 254 tests, 2375 assertions |
 | M04 Pricing/FX | DONE | T09–T12 (ledger-immutability part of T10/T12 completes in M05) on MySQL with faked HTTP: exact 20 L sample (1600000.00 LBP / 17.88 USD), half-up edges, overflow/excess-scale inputs, exact price boundary, missing price 422, manual > provider/fixture precedence, expired/missing rate 503, live ignores fixtures, success/schema/timeout/5xx/429 with bounded attempts, deduplicated observations. One live sync run, labeled. `make verify`: 349 tests, 2800 assertions |
 | M05 POS ingestion | DONE | On MySQL through the real HTTP stack: T13–T19, T23 and the ledger parts of T10/T12. T20–T22 use genuinely overlapping PHP processes, each with its own connection, on a dedicated database: no double spend at the quota edge (80 + 15 + 15 of 100 L; 6 × 20 L of 100 L), one purchase per identical concurrent retry, one winner + 409 for a conflicting or cross-card shared reference (settled by the unique index), and card edits serialized with ingestion in both orders. Live walkthrough through nginx. `make verify`: 441 tests, 3355 assertions |
-| M06 API/tooling | TODO | Depends on M05 |
+| M06 API/tooling | DONE | T24 on MySQL: `openapi.json` valid against the official OpenAPI 3.1 schema (a broken copy fails with exactly the injected errors); routes, abilities and roles match it and planned operations are unrouted; every response in the API tests is validated against the documented status, headers and schema, including 400/401/403/404/409/422/429 (with `Retry-After`)/503. T25: the simulator's five scenarios over real HTTP on fresh cards (Integration suite, and live through nginx: ledger +1); Postman folders 01/02/05 with Newman 6: 26 requests, 51 assertions, 0 failures (ledger +1). `make verify`: 481 tests, 4242 assertions |
 | M07 Deliveries | TODO | Depends on M06 |
 | M08 Reporting | TODO | Depends on M07 |
 | M09 UI polish | TODO | Depends on M08 |
@@ -62,7 +73,143 @@ Starting points from M05:
 
 Use TODO / IN PROGRESS / DONE / BLOCKED. A milestone is DONE only when its checks pass. If an external prerequisite blocks one part, record exactly which part and finish independent local work.
 
-## Most recent session: M05
+## Most recent session: M06
+
+**Date / milestone:** 2026-09-30, M06 API completeness and POS simulator.
+
+**Goal and actual state:**
+- Goal:
+  - the reference endpoints, the card patch, vehicle and driver GET/POST;
+  - the standalone `tools/pos-simulator` with asserted scenarios and environment-only credentials;
+  - OpenAPI and Postman validated against real responses (T24/T25), with delivery and report endpoints left as planned.
+- Result: done, and all local gates pass on MySQL.
+- M05 had nothing outstanding: the tree was clean, `main` matched `origin/main` at `a9bbcc5`, and GitHub CI run 36608901328 had passed on it.
+
+### What was built
+
+- **API:**
+  - `Api\V1\StationController`, `ProductPriceController`, `FuelCardController`, `VehicleController` and `DriverController`, with seven new routes in `routes/api.php`.
+  - Requests:
+    - the new `PaginatedListRequest` base;
+    - `ListStationsRequest`, `ListCompanyRecordsRequest` (for `ListVehiclesRequest` and `ListDriversRequest`), `ListPricesRequest` and `UpdateCardRequest`;
+    - API `StoreVehicleRequest`/`StoreDriverRequest`, extending the web ones with unknown-field refusal and JSON-integer IDs. `ResolvesCompany::companyRules()` gained an optional strict mode.
+  - Resources: `StationResource`, `VehicleResource`, `DriverResource`, `CardResource`.
+  - The shared page builder `Concerns\RespondsWithPages`, which the transaction list now uses too (same output).
+- **Service:** `FuelCardService::applyChanges()` applies the sent limits and status under one card lock and one transaction; a limit not sent keeps its locked value.
+- **Command:** `demo:simulator-cards` (`app/Console/Commands/CreateSimulatorCards.php`).
+- **Simulator:** `tools/pos-simulator/`, with its own Composer project and lock (Guzzle 7.15.5):
+  - `bin/pos-simulator`;
+  - `src/{Simulator, Scenarios, Config, ApiClient, ApiResponse, Reporter, Cents, ConfigurationError, UnexpectedOutcome}`;
+  - `phpstan.neon` and a README.
+- **Contract:**
+  - `docs/api/openapi.json` 0.6.0: `x-status`, `x-milestone`, `x-abilities` and `x-roles` on every operation; descriptions for the M06 operations; `rate_source` in `Price`.
+  - The official OpenAPI 3.1 schema, stored unmodified in `tests/Fixtures/openapi/`.
+  - The dev dependency `opis/json-schema` 2.6.
+- **Postman:**
+  - replay and conflict reuse the saved `purchase_payload`;
+  - the balance check is relative to the balance read at the start;
+  - new calls: station field refused, station refused on vehicles and card changes, manager's `company_id` refused, revoked manager token;
+  - the sandbox-global fix;
+  - the environment template gained three blank variables.
+- **Tests (40 new):**
+  - `tests/Feature/Api/{OpenApiContractTest 7, ReferenceApiTest 9, CardPatchApiTest 8, FleetApiTest 8}`;
+  - `tests/Feature/Console/SimulatorCardsCommandTest` (4);
+  - the new Integration suite, `tests/Integration/PosSimulatorTest` (4).
+  - Helpers: `tests/Concerns/{ChecksOpenApiContract, CallsApi, UsesCommittedDatabase}`. The last one was moved out of `PosConcurrencyTest`, whose behavior is unchanged.
+- **Tooling:**
+  - `make simulate`;
+  - `make test` installs the simulator's locked dependencies first;
+  - `make analyse` also runs PHPStan level 6 on the simulator;
+  - `phpunit.xml` gained the Integration suite.
+- **UI:** the station home page gained a "POS simulator" paragraph (UI-SPEC: "API simulator usage instructions").
+- **Docs:**
+  - `docs/05-API-CONTRACT.md` ("Implemented behavior (M06)", token abilities);
+  - `docs/DECISIONS.md` (M06 record);
+  - README (endpoints, simulator, Postman, commands, status);
+  - `postman/README.md`, `tools/pos-simulator/README.md`;
+  - `docs/02-ARCHITECTURE.md` (`make simulate`), `docs/SOURCES.md`, CHANGELOG.
+
+### Checks: exact command and actual outcome
+
+| Command | Outcome |
+| --- | --- |
+| `git status`, `git log`, `git rev-parse HEAD origin/main` at the start | Clean tree; both at `a9bbcc5` |
+| OpenAPI tooling probe (scratch Composer project, removed afterwards) | The official schema was fetched (33,992 bytes, SHA-256 `da01ba28…314ed0`). First run: every Schema Object reported "openapi, info missing", because opis resolves `$dynamicRef: #meta` to the document root. After substituting `$ref: #/$defs/schema`: "unevaluated properties style, explode", because opis writes schema defaults into the data. With `allowDefaults` off: the document is valid, and a broken copy reports exactly the 3 injected errors |
+| `php artisan route:list --path=api/v1` | 13 routes (7 new) |
+| `phpstan` after the API code | 1 error: `rules()` unknown in the trait's context on the abstract list request. It is now declared abstract; then `[OK] No errors` |
+| `OpenApiContractTest`, first run | **2 failed, 5 passed**, both test mistakes: (1) malformed JSON is refused before the token limiter runs, so it did not count toward the 5; (2) `withToken()` persists on the test client, so the "no token" call sent the manager's token (403, not 401). Second run: **1 failed**: the helper's token expires after a day, so after `travel(10)` a 401 was right; the test now issues a fresh token. Then 7 passed / 188 assertions. The M02/M05 responses matched the document without any change |
+| `ReferenceApiTest` | 9 passed / 177 assertions on the first run |
+| `CardPatchApiTest`, first run | **5 failed, 2 passed**, my wrong assumptions: the demo seed already writes 12 audit rows and cuts `FF-ATLAS-H02` to 200 L. Assertions now look only at audit rows written after the seed. The same inspection found the seed's `fuel_card.limits_changed` versus the service's `card.limits_changed` (recorded, not changed). Then 7 passed. I then added a forced-failure test, because the inactive-company test cannot tell whether the outer transaction exists (the limits step fails first there). Then 8 passed / 210 assertions |
+| `FleetApiTest` | 8 passed / 235 assertions. Its request helper was renamed from `call()` before the first run: that name would have overridden Laravel's own test method |
+| `php artisan test tests/Feature/Api` | 54 passed / 932 assertions |
+| `composer update --working-dir=tools/pos-simulator`, `composer audit` | guzzlehttp/guzzle 7.15.5 plus 8 dependencies; "No security vulnerability advisories found". `--help` exit 0; missing credentials exit 2 |
+| `php artisan test --testsuite=Integration`, first run | 4 passed / 48 assertions (11.71 s) |
+| `SimulatorCardsCommandTest` | 4 passed / 29 assertions |
+| **Live simulator through nginx**: `demo:simulator-cards --tag=M06`, then `make simulate` with `POS_EMAIL=operator.beirut@…` and the password from `.env` in an environment variable, never printed | Ledger 33 before. All 5 scenarios, 16 checks passed. New purchase id 34: 1600000.00 LBP / 17.88 USD at the fixture rate; identical and equivalent replays 200 with the same id; conflict 409; blocked 403; quota 403 (6.00 L on a 5.00 L card); "Token revoked." Ledger 34 after: +1 |
+| **Newman run 1** (`npx --yes newman@6` in the node container; folders 01, 02, 05; fresh cards, tag `PM1`) | 26 requests; **47 assertions, 3 failed**. A real bug in the supplied collection: `const data` at the top of a test script collides with the Postman sandbox's legacy `data` global (SyntaxError), so the purchase was never saved and two later checks failed as a result. Ledger 34 → 35 |
+| **Newman run 2** after renaming the variable (tag `PM2`) | 26 requests, **51 assertions, 0 failed**. Ledger 35 → 36 |
+| `make verify` #1 | exit 0: Pint PASS on 268 files, Larastan OK, **481 tests / 4242 assertions** (136.84 s), npm 0 vulnerabilities, Vite build OK |
+| Simulator style and analysis | Pint PASS on 10 files. PHPStan level 6 (`-c tools/pos-simulator/phpstan.neon`): 1 error, an unhandled `match` value; a default was added. `make analyse` now runs both analyses: `[OK] No errors` twice |
+| Negative checks (file mutated, suite run, file restored and checksum-verified) | See the list below this table |
+| `make verify` #2, the committed tree | exit 0: Pint PASS on 268 files (the simulator sources included), Larastan OK, simulator PHPStan OK, **481 tests / 4242 assertions** (136.21 s), npm 0 vulnerabilities, Vite build OK |
+| `sh docker/bin/check-setup-preserves-state.sh` | PASS: "Nothing to migrate", demo "nothing changed", APP_KEY, credentials and database rows kept |
+| `usage:reconcile`; token count in dev after the runs | "All monthly usage counters match the ledger."; 0 tokens named `pos-simulator` or `postman-local` |
+
+Negative checks:
+- **N1**, an extra field in `TransactionResource`: 2 contract tests failed (`additionalProperties: false`).
+- **N2**, `abilities:fleet:write` removed from `POST /vehicles`: the route-parity test and the read-only-token check failed.
+- **N3**, a double counter increment in the shared service: it also broke the demo seed, so all 4 Integration tests failed in setup. Not a fair test of the simulator, so it was redone as N3b.
+- **N3b**, an extra usage bump on the API path only: the simulator stopped with "Result: FAILED" and its test failed.
+- **N4**, replays answered 201: the simulator failed.
+- **N5**, my first attempt at removing the outer transaction was malformed: it returned the closure, so every test failed. Discarded.
+- **N5b**, the outer transaction replaced with `call_user_func`: only the forced-failure rollback test failed, as predicted.
+- **N6**, the rate checked before the price: the missing-price test failed (503 instead of 422).
+- **N7**, the station `is_active` filter removed: 2 station tests failed.
+
+### Not run or not verified
+
+- GitHub CI for the M06 commit (reported in the session reply after the push).
+- The Postman desktop app itself: the collection ran with Newman 6, Postman's own command-line runner.
+- Postman folders 03 and 04 and the delivery, report and export endpoints: M07 and M08. They remain `planned` in `openapi.json`.
+- The 503 `temporarily_unavailable` path (carried over from M05): no deadlock or lock timeout was provoked.
+- The simulator with a host PHP outside Docker: it ran only in the project's PHP 8.3 image.
+- SQL Server (S01).
+
+### Decisions and deviations
+
+All are in `docs/DECISIONS.md` (2026-09-30, M06):
+
+- `rate_source` added to the price rows (the one contract addition);
+- the `x-*` operation markers and route parity;
+- how the official schema is validated;
+- the price-list horizon and no future instants;
+- stations active only for every role;
+- the card patch's atomicity, keep-unsent, no API archiving and no confirmation step;
+- the fleet API rules;
+- the simulator design and exit codes;
+- fresh fixtures instead of resets;
+- the Integration suite;
+- the Postman changes and the sandbox-global fix;
+- the seed audit-name finding.
+
+No product rule changed.
+
+### Remaining work and blockers
+
+None for M06.
+- Found, not changed: the demo seed audits its quota-cut scenario as `fuel_card.limits_changed`, while `FuelCardService` writes `card.limits_changed`. For the M10 review.
+- Deliberately later: deliveries (M07); reports and CSV (M08).
+
+**Suggested commit message:** `feat: document the API and add a standalone POS simulator`.
+
+**One concept to explain:** a contract is only trustworthy when a test compares it with reality. M06 checks the same promise at three levels:
+1. **The document is well formed:** `openapi.json` is validated against the official OpenAPI 3.1 schema.
+2. **The document matches the routes:** every documented operation exists with exactly the documented token ability and roles, and nothing undocumented is routed. Authorization boundaries become a checked list, not prose.
+3. **The behavior matches the document:** real responses, errors included, are validated against the documented schemas. The simulator then drives the running application over HTTP and checks not only the status codes but also that the card was charged exactly once.
+
+The mutation checks show each level catches a different kind of drift: an extra field, a missing ability, a double charge.
+
+## Earlier session: M05
 
 **Date / milestone:** 2026-09-29, M05 POS transactions and atomic quotas.
 

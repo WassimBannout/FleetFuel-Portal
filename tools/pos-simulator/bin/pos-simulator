@@ -1,0 +1,24 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/*
+ * FleetFuel POS simulator. Configuration and credentials come from the
+ * environment only; see ../README.md.
+ *
+ *     php tools/pos-simulator/bin/pos-simulator [success|replay|conflict|blocked|quota|all]
+ */
+
+use FleetFuel\PosSimulator\Simulator;
+
+$autoload = __DIR__.'/../vendor/autoload.php';
+
+if (! is_file($autoload)) {
+    fwrite(STDERR, "The simulator's dependencies are missing. Run: composer install --working-dir=tools/pos-simulator\n");
+    exit(2);
+}
+
+require $autoload;
+
+exit((new Simulator(STDOUT, STDERR))->main($argv, getenv()));
