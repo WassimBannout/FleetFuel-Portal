@@ -9,6 +9,9 @@
  * A "purchase" goes through the real HTTP kernel (token auth, validation,
  * controller, service); "block" and "set_limits" call FuelCardService as a
  * manager's screen would. It prints one line "RESULT:{json}".
+ *
+ * A purchase job may set "lock_wait_timeout" (seconds, MySQL's minimum is 1)
+ * so a lock held by the test turns into lock wait timeouts quickly.
  */
 
 use App\Enums\CardStatus;
@@ -19,6 +22,7 @@ use Illuminate\Contracts\Console\Kernel as ConsoleKernel;
 use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Foundation\Application;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 require __DIR__.'/../../vendor/autoload.php';
 
@@ -28,7 +32,7 @@ if (getenv('APP_ENV') !== 'testing' || ! str_starts_with($database, 'fleetfuel_t
     exit(2);
 }
 
-/** @var array{action: string, token?: string, payload?: array<string, mixed>, card_id?: int, actor_id?: int, limit_l?: ?string, limit_usd?: ?string} $job */
+/** @var array{action: string, token?: string, payload?: array<string, mixed>, lock_wait_timeout?: int, card_id?: int, actor_id?: int, limit_l?: ?string, limit_usd?: ?string} $job */
 $job = json_decode((string) file_get_contents($argv[1] ?? ''), true, 512, JSON_THROW_ON_ERROR);
 
 /** @var Application $app */
@@ -45,6 +49,12 @@ echo 'RESULT:'.json_encode($result, JSON_THROW_ON_ERROR).PHP_EOL;
 function purchase(Application $app, array $job): array
 {
     $kernel = $app->make(HttpKernel::class);
+
+    if (isset($job['lock_wait_timeout'])) {
+        $kernel->bootstrap();
+        DB::statement('SET SESSION innodb_lock_wait_timeout = '.(int) $job['lock_wait_timeout']);
+    }
+
     $request = Request::create('/api/v1/transactions', 'POST', server: [
         'HTTP_ACCEPT' => 'application/json',
         'CONTENT_TYPE' => 'application/json',
@@ -57,7 +67,10 @@ function purchase(Application $app, array $job): array
     return [
         'status' => $response->getStatusCode(),
         'body' => json_decode((string) $response->getContent(), true),
+        // Undecoded too: decoding to arrays turns an empty object {} into [].
+        'content' => (string) $response->getContent(),
         'replayed' => $response->headers->get('Idempotency-Replayed'),
+        'retry_after' => $response->headers->get('Retry-After'),
     ];
 }
 

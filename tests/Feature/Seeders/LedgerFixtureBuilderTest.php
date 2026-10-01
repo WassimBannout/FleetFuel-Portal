@@ -18,6 +18,7 @@ use App\Models\Product;
 use App\Models\Station;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Services\FuelCardService;
 use App\Services\UsageReconciliation;
 use Carbon\CarbonImmutable;
 use Closure;
@@ -126,18 +127,50 @@ class LedgerFixtureBuilderTest extends TestCase
         $this->assertSame('0.00', $reconciliation->mismatches()[0]['counter_l']);
     }
 
-    public function test_a_quota_change_is_audited_with_old_and_new_values(): void
+    /**
+     * The seed once audited limit cuts as "fuel_card.limits_changed" while the
+     * screens and the API write "card.limits_changed", so the audit filter
+     * listed one change under two names. The builder now goes through
+     * FuelCardService, and its row must be the one a live change writes.
+     */
+    public function test_a_quota_change_writes_the_audit_row_of_a_live_change(): void
     {
-        $this->builder->changeMonthlyLimits($this->world['card'], $this->world['manager'], ['monthly_limit_usd' => '50.00'], CarbonImmutable::now());
+        $this->purchase('60.00'); // 53.63 USD used this month
+        $at = CarbonImmutable::now()->subMinutes(30);
 
-        $this->assertSame('50.00', $this->world['card']->fresh()?->monthly_limit_usd);
+        $this->builder->changeMonthlyLimits($this->world['card'], $this->world['manager'], ['monthly_limit_usd' => '50.00'], $at);
 
-        $audit = AuditLog::query()->sole();
-        $this->assertSame('fuel_card.limits_changed', $audit->action);
-        $this->assertSame(['monthly_limit_usd' => '100.00'], $audit->old_values);
-        $this->assertSame(['monthly_limit_usd' => '50.00'], $audit->new_values);
-        $this->assertSame($this->world['manager']->id, $audit->user_id);
-        $this->assertSame($this->world['company']->id, $audit->company_id);
+        $card = $this->world['card']->fresh();
+        $this->assertSame('50.00', $card?->monthly_limit_usd);
+        $this->assertSame('100.00', $card->monthly_limit_l);
+        $this->assertTrue($card->updated_at->equalTo($at));
+
+        $seeded = AuditLog::query()->sole();
+        $this->assertSame('card.limits_changed', $seeded->action);
+        $this->assertSame('fuel_card', $seeded->auditable_type);
+        $this->assertSame(['monthly_limit_l' => '100.00', 'monthly_limit_usd' => '100.00'], $seeded->old_values);
+        $this->assertSame(['monthly_limit_l' => '100.00', 'monthly_limit_usd' => '50.00', 'below_current_usage' => true], $seeded->new_values);
+        $this->assertSame($this->world['manager']->id, $seeded->user_id);
+        $this->assertSame($this->world['company']->id, $seeded->company_id);
+        $this->assertTrue($seeded->created_at->equalTo($at));
+
+        app(FuelCardService::class)->updateLimits($card, '100.00', '40.00', $this->world['manager']);
+
+        $live = AuditLog::query()->latest('id')->firstOrFail();
+        $this->assertNotSame($seeded->id, $live->id);
+        $this->assertSame($seeded->action, $live->action);
+        $this->assertSame($seeded->auditable_type, $live->auditable_type);
+        $this->assertSame(array_keys($seeded->old_values ?? []), array_keys($live->old_values ?? []));
+        $this->assertSame(array_keys($seeded->new_values ?? []), array_keys($live->new_values ?? []));
+    }
+
+    public function test_a_historical_quota_change_is_judged_against_its_own_month(): void
+    {
+        $this->purchase('60.00'); // this month only; last month has no usage
+
+        $this->builder->changeMonthlyLimits($this->world['card'], $this->world['manager'], ['monthly_limit_l' => '50.00'], CarbonImmutable::now()->subMonth());
+
+        $this->assertFalse(AuditLog::query()->sole()->new_values['below_current_usage']);
     }
 
     public function test_manual_overrides_are_admin_only_and_last_at_most_72_hours(): void

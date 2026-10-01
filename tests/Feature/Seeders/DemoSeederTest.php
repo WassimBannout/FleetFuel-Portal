@@ -183,10 +183,10 @@ class DemoSeederTest extends TestCase
         $usage = CardMonthlyUsage::query()->where('fuel_card_id', $card->id)->where('month_start', '2026-09-01')->firstOrFail();
         $this->assertSame('200.00', $card->monthly_limit_l);
         $this->assertSame('250.00', $usage->used_l);
-        $audit = AuditLog::query()->where('action', 'fuel_card.limits_changed')->where('auditable_id', $card->id)->firstOrFail();
+        $audit = AuditLog::query()->where('action', 'card.limits_changed')->where('auditable_id', $card->id)->firstOrFail();
         $this->assertSame('fuel_card', $audit->auditable_type);
-        $this->assertSame(['monthly_limit_l' => '300.00'], $audit->old_values);
-        $this->assertSame(['monthly_limit_l' => '200.00'], $audit->new_values);
+        $this->assertSame(['monthly_limit_l' => '300.00', 'monthly_limit_usd' => '300.00'], $audit->old_values);
+        $this->assertSame(['monthly_limit_l' => '200.00', 'monthly_limit_usd' => '300.00', 'below_current_usage' => true], $audit->new_values);
         $this->assertSame($card->company_id, $audit->company_id);
 
         // FX: an expired provider observation and an audited, already expired

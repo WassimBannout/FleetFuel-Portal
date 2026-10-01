@@ -62,6 +62,10 @@ return [
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
+            // A failed query's exception message, which Laravel logs, keeps the
+            // ? placeholders instead of the bound values, so card numbers,
+            // emails and session IDs stay out of the logs.
+            'mask_bindings_in_exception_messages' => true,
         ],
 
         'mariadb' => [

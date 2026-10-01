@@ -10,6 +10,7 @@ use App\Models\Vehicle;
 use App\Support\Redact;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Route;
 use Tests\Concerns\BuildsLedgerFixtures;
 use Tests\TestCase;
 
@@ -128,6 +129,38 @@ class TenantIsolationTest extends TestCase
         foreach (['/dashboard', '/station', '/transactions/1'] as $uri) {
             $this->get($uri)->assertRedirect('/login');
         }
+    }
+
+    /**
+     * Every route needs a signed-in user (web) or a token (API), except a
+     * short public list, so a new route without `auth` fails here. Each
+     * route is requested as a guest, with 1 for every route parameter.
+     */
+    public function test_every_route_except_the_public_ones_requires_sign_in(): void
+    {
+        $public = ['GET /', 'GET /login', 'POST /login', 'GET /up', 'GET /health', 'POST /api/v1/auth/token'];
+        $seen = [];
+        $refused = [];
+
+        foreach (Route::getRoutes()->getRoutes() as $route) {
+            foreach (array_diff($route->methods(), ['HEAD']) as $method) {
+                $uri = '/'.ltrim($route->uri(), '/');
+                $seen[] = "{$method} {$uri}";
+                if (in_array("{$method} {$uri}", $public, true)) {
+                    continue;
+                }
+
+                $api = str_starts_with($uri, '/api/');
+                $response = $this->call($method, (string) preg_replace('/\{[^}]+\}/', '1', $uri), server: $api ? ['HTTP_ACCEPT' => 'application/json'] : []);
+
+                $protected = $api ? $response->getStatusCode() === 401 : $response->isRedirect(route('login'));
+                $this->assertTrue($protected, "{$method} {$uri} answered a guest with HTTP {$response->getStatusCode()}.");
+                $refused[] = "{$method} {$uri}";
+            }
+        }
+
+        $this->assertSame([], array_values(array_diff($public, $seen)), 'A public route in the list no longer exists.');
+        $this->assertGreaterThan(80, count($refused));
     }
 
     public function test_names_are_html_escaped(): void

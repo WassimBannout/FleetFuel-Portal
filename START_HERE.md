@@ -1,6 +1,8 @@
 # Build FleetFuel Portal with Claude Code
 
-This folder is a complete **implementation handoff**, prepared on 2026-09-28. The application has not been built yet. Everything needed to direct the build is here; you do not need the previous chat or the file in Downloads.
+This folder began as a complete **implementation handoff**, prepared on 2026-09-28, when no application had been built yet. Everything needed to direct the build is here; you do not need the previous chat or the file in Downloads.
+
+**Status, 2026-10-01:** milestones M00–M10 are built and verified (see [docs/PROGRESS.md](docs/PROGRESS.md) and [docs/RELEASE-VERIFICATION.md](docs/RELEASE-VERIFICATION.md)). M11 is next. The steps below still describe how to continue and how to resume a session.
 
 ## 1. Open Claude Code in this folder
 

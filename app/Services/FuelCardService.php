@@ -116,7 +116,22 @@ class FuelCardService
      */
     public function updateLimits(FuelCard $card, ?string $limitL, ?string $limitUsd, User $actor, bool $allowBelowUsage = true): FuelCard
     {
-        return DB::transaction(function () use ($card, $limitL, $limitUsd, $actor, $allowBelowUsage): FuelCard {
+        return $this->updateLimitsAt($card, $limitL, $limitUsd, $actor, $allowBelowUsage, null);
+    }
+
+    /**
+     * Demo and test history: the same rules and the same audit row as
+     * updateLimits(), judged against the usage of $at's month and stamped
+     * at $at.
+     */
+    public function updateLimitsHistorical(FuelCard $card, ?string $limitL, ?string $limitUsd, User $actor, CarbonImmutable $at): FuelCard
+    {
+        return $this->updateLimitsAt($card, $limitL, $limitUsd, $actor, true, $at->utc()->startOfSecond());
+    }
+
+    private function updateLimitsAt(FuelCard $card, ?string $limitL, ?string $limitUsd, User $actor, bool $allowBelowUsage, ?CarbonImmutable $at): FuelCard
+    {
+        return DB::transaction(function () use ($card, $limitL, $limitUsd, $actor, $allowBelowUsage, $at): FuelCard {
             $card = $this->lock($card);
             $this->ensureNotArchived($card);
             $this->ensureCompanyActive(Company::query()->findOrFail($card->company_id));
@@ -132,7 +147,7 @@ class FuelCardService
             }
 
             // Usage only changes under the card lock we hold, so this is exact.
-            $balance = $this->balance($card);
+            $balance = $this->balance($card, $at);
             $belowUsage = ($card->isDirty('monthly_limit_l') && $this->isBelow($card->monthly_limit_l, $balance->usedL))
                 || ($card->isDirty('monthly_limit_usd') && $this->isBelow($card->monthly_limit_usd, $balance->usedUsd));
 
@@ -140,9 +155,13 @@ class FuelCardService
                 throw BusinessRuleViolation::limitBelowUsage($balance->usedL, $balance->usedUsd);
             }
 
+            if ($at !== null) {
+                $card->updated_at = $at;
+            }
+
             $card->save();
             $this->audit->record('card.limits_changed', $card, $actor, $card->company_id, $old,
-                $this->limits($card) + ['below_current_usage' => $belowUsage]);
+                $this->limits($card) + ['below_current_usage' => $belowUsage], $at);
 
             return $card;
         });

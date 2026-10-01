@@ -4,59 +4,54 @@ Updated: 2026-10-01
 
 ## Current state
 
-- **M09 Dashboard and UI finish is DONE**, on top of M00–M08. It was verified locally on MySQL 8.4 and in a real Chrome browser.
-  - **Layout:**
-    - a navy sidebar that becomes a Menu button and off-canvas panel below 992 px;
-    - role-based link groups, a "Skip to main content" link and visible keyboard focus;
-    - plain-language error pages (403, 404, 419, 429, 5xx) that work without the database.
-  - **Dashboard:**
-    - this Beirut month next to last month;
-    - quota warnings with reasons;
-    - open deliveries;
-    - the USD/LBP rate in use, with its source.
-  - **Transactions (`/transactions`)**, for every role, scoped like the API:
-    - filters, and totals for the whole filter;
-    - a CSV link of exactly those rows;
-    - jQuery reloads of the results only, with the newest answer always winning and the filters kept in the address bar;
-    - loading, empty and error states that never leave stale totals on screen.
-  - **Audit log (`/audit`)**, for admins: filters by person, action, record type, company and date, with credential-like fields redacted and card numbers masked.
-  - **Other changes:**
-    - rate-source badges on the list, the purchase page and the dashboard;
-    - page scripts of a disabled user get 401;
-    - a phone-layout bug, present since M03, fixed;
-    - the JavaScript unit tests (`npm test`) now run in `make test`;
-    - real screenshots in `docs/screenshots/`.
-- **Dev database:** M09 changed no data in it. The live checks only signed in, read pages and signed out (36 purchases, as before).
-  - Two failed admin sign-ins were logged on dev, from my misconfigured throwaway server (explained in the session log). The guest sessions and sign-in throttle entries they left expire on their own.
-  - Restart `app` and `web` after pulling (`docker compose restart app web`). Docker Desktop's file sharing can keep serving an old copy of a file that was replaced, rather than edited in place, while a container runs (see the session log).
+- **M10 Release verification is DONE**, on top of M00–M09. Every applicable acceptance case T01–T35 is mapped to tests in [docs/RELEASE-VERIFICATION.md](RELEASE-VERIFICATION.md). That page also holds the quality gates, the clean-clone rehearsal, the review findings and the limitations.
+  - **New tests:**
+    - T35, the app booting from production caches with debug off;
+    - the contention 503 behind a held card lock;
+    - a guest sweep over every route;
+    - documentation parity (make targets, Artisan commands, endpoints, local URLs, links).
+  - **Fixed:**
+    - failed-query log messages contained bound values (card numbers, emails, session IDs);
+    - the demo seed's audit name `fuel_card.limits_changed`;
+    - a second clone taking over the first one's containers and volume;
+    - the undocumented `Retry-After` on the contention 503;
+    - two unused public storage routes.
+  - **New command:** `make audit` (Composer and npm advisories), also a CI step.
+  - **New docs:** [docs/DEBUGGING-STORY.md](DEBUGGING-STORY.md) and [docs/M10-PULL-REQUEST.md](M10-PULL-REQUEST.md).
+- **Dev database:** M10 changed no data in it (36 purchases and 5 users before and after the rehearsal). Its earlier seeded `fuel_card.limits_changed` audit row stays: audit history is not rewritten.
+  - The running dev containers already see the M10 files: the new config and service code were checked inside `app` and `scheduler`, and no storage route is registered. So no restart is needed.
+  - `make setup`, `make up` and `make test` now run a quick project check first.
 - **Local URLs:** <http://localhost:8080> (sign-in `/login`, dashboard `/dashboard`, transactions `/transactions`, audit `/audit`, reports `/reports`, readiness `/health`, liveness `/up`, API base `/api/v1`).
 - **Git:** branch `main` tracks `origin/main` (github.com/WassimBannout/FleetFuel-Portal).
-  - M08 is `12021fe`. GitHub Actions run 36845821888 passed on it:
-    - Pint PASS on 305 files and Larastan OK twice;
-    - 544 tests / 5312 assertions (125.53 s);
+  - M09 is `a4c1ea0`. GitHub Actions run 36874363104 passed on it (4 min 46 s):
+    - Pint PASS on 315 files and Larastan OK twice;
+    - 580 tests / 5716 assertions (109.60 s) and 14 JavaScript tests;
     - npm 0 vulnerabilities and a Vite build OK;
     - the repeated-setup step passed.
-  - M09 is committed and pushed in the commit that contains this file. Its CI result had not been observed when this file was written.
+  - M10 is committed and pushed in the commit that contains this file. Its CI result had not been observed when this file was written.
 
 ## Next action
 
-Execute `prompts/10-release-quality.md` (M10):
-- audit every implemented acceptance case and run the CI-equivalent checks;
-- rehearse a clean checkout with isolated Compose volumes and ports;
-- check that routes, contracts and documented commands agree;
-- record one real troubleshooting story.
+Execute `prompts/11-shipping-portfolio.md` (M11). Prepare and verify locally first, then ask for the outward-facing decisions:
+- **Local work:**
+  - a production image (locked `--no-dev` Composer, compiled assets, no source bind mount, non-root);
+  - deploy, rollback, scheduler, and backup-and-restore runbooks, with a restore into a disposable database;
+  - the implementation-based README;
+  - the demo script;
+  - truthful résumé bullets from the measured numbers.
+- **Needs your decision before anything is published:**
+  - a hosting provider and account;
+  - the public demo policy (which accounts reviewers get);
+  - the license.
 
-Starting points from M09:
+  Nothing is deployed or published until you ask.
 
-- **Debugging stories with real evidence:**
-  - the phone overflow (screen-reader text escaping the scrolling table, found by measuring in Chrome);
-  - `php artisan serve` dropping environment overrides (its workers re-read `.env`);
-  - Docker Desktop serving a stale copy of a file replaced by rename (the inode check).
-
-  The phone fix is CSS and has no automated regression test yet. A browser-level check would be the M10 way to keep it fixed.
-- **The audit log now shows the M06 audit-name mismatch:** "Fuel card limits changed" (seed: `fuel_card.limits_changed`) and "Card limits changed" (service: `card.limits_changed`) appear as two actions in its filter. Decide and fix in M10.
+Starting points from M10:
+- **T35's hosted part:** HTTPS, secure cookies, trusted proxies and a real host's smoke test. `ProductionBootTest` covers only the application's production boot.
+- **A production image** can reuse `ProductionBootTest`'s settings: `php artisan optimize`, `APP_DEBUG=false`, logs to stderr.
 - **Carried over:**
-  - the 503 `temporarily_unavailable` path;
+  - MySQL duplicate-key messages quote the duplicated value;
+  - the phone-overflow guard is manual (Chrome);
   - the simulator with a host PHP outside Docker;
   - SQL Server (S01).
 
@@ -74,13 +69,129 @@ Starting points from M09:
 | M07 Deliveries | DONE | T26–T28 on MySQL. Creation writes the initial history. Each accepted change writes exactly one history row and one audit row, and both roll back with the order when either write is forced to fail. Skipped, repeated, stale and final-status changes and manager escalation are refused with nothing written. Token abilities are checked per role; another company's order is 404. T28: separate PHP processes through the real HTTP kernel; two admins, or an admin and a manager, from the same expected status give one 200 and one 409 `stale_state`; the commit and rollback orderings are covered too. Live: Postman folder 03 with Newman (19 requests, 38 assertions, 0 failures) and the real jQuery module in jsdom through nginx (12/12). `make verify`: 508 tests, 4937 assertions |
 | M08 Reporting | DONE | T29–T33 on MySQL against the demo seed. Consumption totals per company ID worked out by hand (515.00 L / 41,675,000.00 LBP and 325.00 L / 26,775,000.00 LBP; USD equal to the stored per-purchase sum). Equal names never merge; vehicle grouping follows the purchase snapshot; new prices and rates change nothing. Quota exceptions: a reduced limit, a limit reached exactly, blocked and archived cards; a declined POS purchase adds nothing. Rapid fills: exactly 30 min not flagged, 29:59 flagged, same-second fills by ID, the predecessor read from before the range start, card-only purchases never flagged. Efficiency from recorded readings only. SLA from the history rows. Top stations ties by ID. CSV: tenant and date scope, every row across chunks, the same totals as the ledger list, RFC 4180 quoting and formula neutralization, identical to the browser download. Cross-tenant checks on every report and the export. 11 deliberate breakages all caught. Query plans on 64,032 purchases led to one new index. `make verify`: 544 tests, 5312 assertions |
 | M09 UI polish | DONE | T34 on MySQL and in Chrome. Latest response wins: unit tests with controlled promises, and in the real page with a delayed first answer (a broken build shows the stale result, the real one does not). Totals agree with the CSV for the whole filter, across pages and roles. Loading, empty, error, offline, expired-session and validation states. Keyboard sign-in, skip link, menu and paging. No horizontal page overflow at 390 px on 32 pages. The five-minute walkthrough for all three roles, with the POS simulator. Fixed query counts for the list, dashboard and audit log. 13 deliberate breakages all caught. `make verify`: 580 tests, 5716 assertions (plus 14 JavaScript tests) |
-| M10 Release quality | TODO | Depends on M09 |
+| M10 Release quality | DONE | T01–T35 mapped to tests (docs/RELEASE-VERIFICATION.md); T35 locally by `ProductionBootTest` (production caches, debug off, real HTTP, a real database failure shown plainly and logged without values), the hosted part in M11. Clean clone in its own Compose project, port and volume next to the running stack: setup, `make verify` (590 tests / 5987 assertions + 14 JS), repeated setup and `make audit` all passed; an unnamed second clone is refused. Five review findings fixed with regression tests; the contention 503 tested; documentation parity tested; 7 deliberate breakages caught. `make verify`: 590 tests, 5972 assertions (plus 14 JavaScript tests) |
 | M11 Shipping/portfolio | TODO | Depends on M10; live deployment may need user account |
 | S01 SQL Server | OPTIONAL | Begin only after user requests the stretch |
 
 Use TODO / IN PROGRESS / DONE / BLOCKED. A milestone is DONE only when its checks pass. If an external prerequisite blocks one part, record exactly which part and finish independent local work.
 
-## Most recent session: M09
+## Most recent session: M10
+
+**Date / milestone:** 2026-10-01, M10 release verification.
+
+**Goal and actual state:**
+- Goal (prompts/10-release-quality.md):
+  - audit every implemented acceptance case;
+  - run complete CI-equivalent checks and fix actual findings with regression tests;
+  - rehearse a clean checkout with isolated Compose volumes and ports;
+  - check route-contract and documentation-command parity;
+  - record a real troubleshooting example.
+- Result: done. All local gates pass on MySQL 8.4, both in the development checkout and in a fresh clone set up in its own Compose project next to it. The evidence is in [docs/RELEASE-VERIFICATION.md](RELEASE-VERIFICATION.md).
+- M09 had nothing outstanding: the tree was clean, `main` matched `origin/main` at `a4c1ea0`, and GitHub CI run 36874363104 had passed on it (observed at the end of the M09 session).
+
+### What was built and fixed
+
+- **Fix: failed queries logged their bound values.** `config/database.php` sets `mask_bindings_in_exception_messages` on the MySQL connection (the story is in [docs/DEBUGGING-STORY.md](DEBUGGING-STORY.md)).
+  - Regression tests: `ErrorResponsesTest::test_a_failed_query_is_logged_without_its_bound_values`, plus an assertion in `ProductionBootTest`.
+- **Fix: one audit action under two names.** `FuelCardService::updateLimitsHistorical()` exists, and `LedgerFixtureBuilder::changeMonthlyLimits()` uses it, so the seed's quota cut is the live `card.limits_changed` row.
+  - `LedgerFixtureBuilderTest`: the seeded row equals a live change, and a past change is judged against its own month.
+  - `DemoSeederTest`, `FuelCardScreensTest` and `CardPatchApiTest` updated: the last two look up their card's own row, because the seed now writes the same action.
+- **Fix: a second clone took over the first one's containers and volume.**
+  - `docker/bin/prepare-env.sh` accepts `COMPOSE_PROJECT_NAME` and `APP_PORT` for a new `.env`.
+  - `compose.yaml` names the image after the project; `.env.example` documents the name (commented out).
+  - New `docker/bin/check-compose-project.sh`, run by `make setup`, `make up` and `make test`.
+  - README section "A second copy on one machine".
+- **Fix: the contract.** `openapi.json` 0.10.0 documents the optional `Retry-After` on the POS 503 and marks the always-sent headers required. `ChecksOpenApiContract` requires exactly the required headers.
+- **Fix: unused public routes.** `config/filesystems.php` turns `serve` off. `TenantIsolationTest::test_every_route_except_the_public_ones_requires_sign_in` requests every route as a guest.
+- **New tests:**
+  - `PosConcurrencyTest::test_contention_that_outlasts_the_retries_is_a_503_and_records_nothing`. The POS worker can shorten its lock wait timeout and returns `Retry-After` and the raw body.
+  - `tests/Feature/DocumentationParityTest.php` (5 checks).
+  - `tests/Integration/ProductionBootTest.php` (T35).
+- **Tooling:** `make audit` and a CI step "Dependency security advisories".
+- **Docs:**
+  - [docs/RELEASE-VERIFICATION.md](RELEASE-VERIFICATION.md), [docs/DEBUGGING-STORY.md](DEBUGGING-STORY.md) and [docs/M10-PULL-REQUEST.md](M10-PULL-REQUEST.md);
+  - README (status, `make audit`, a second copy, links);
+  - `docs/02-ARCHITECTURE.md` (`make audit`, the project check);
+  - `docs/09-OPERATIONS-AND-PORTFOLIO.md` (two troubleshooting rows);
+  - `START_HERE.md`: a status line. Its "the application has not been built yet" had been stale since M00;
+  - DECISIONS (the M10 record), CHANGELOG, this file.
+
+### Checks: exact command and actual outcome
+
+PHP commands ran as `docker compose run --rm app …` against the isolated MySQL test databases, unless stated otherwise.
+
+| Command | Outcome |
+| --- | --- |
+| `git status`, `git log`, `git remote -v` at the start | Clean tree; `main` at `a4c1ea0` = `origin/main` |
+| Acceptance audit: every test name per file, and the T-numbers cited in the tests | T01–T34 covered by existing tests (see the matrix in RELEASE-VERIFICATION). T35 had no test, and the documented 503 `temporarily_unavailable` path had never run |
+| Seeder, card and card-API tests after routing the seed through `FuelCardService` | **3 failed, 53 passed.** Three tests looked up "the" `card.limits_changed` row with `sole()`, and the seed now writes one too. Scoped to the card under test, then **85 passed / 1395 assertions** (seeders, cards, card API, audit, dashboard, reports) |
+| The new contention test, first run | **Failed on the contract check:** `details` was an array. The cause was my worker, which decoded the body into PHP arrays and turned `{}` into `[]`; the server sends `{}`. The worker now returns the raw body too. Then **1 passed / 12 assertions** (9.45 s) |
+| API, POS and concurrency suites after the contract-header change | **166 passed / 2268 assertions** |
+| `DocumentationParityTest`, first run | 4 passed, 1 error: matching the API base URL `/api/v1` threw `NotFoundHttpException`. The test now accepts the base URL and POST-only endpoints. Then **5 passed / 97 assertions** |
+| `php artisan optimize`, then `about --json`, in production mode with temporary cache paths (one-off container) | Config, events, routes and views cached; `about`: production, `debug_mode` false, all four caches in use |
+| `ProductionBootTest` | **1 passed / 47 assertions** on the first run |
+| `composer audit` (app, simulator), `npm audit` | No advisories / 0 vulnerabilities. `composer outdated --direct`: `laravel/framework` 13.34.0 and `phpunit/phpunit` 12.5.37 available, no advisory; not applied |
+| A failing query in tinker on the test database (an unknown column, card number bound) | The `QueryException` message contained `card_no = FF-TEST-1234`. After setting `mask_bindings_in_exception_messages`: `ErrorResponsesTest` + `ProductionBootTest` **8 passed / 83 assertions** |
+| `route:list`, routes without `auth` | Only the six public routes, plus `GET`/`PUT storage/{path}` (Laravel's local-disk serving, unused). `serve` turned off; the guest sweep **1 passed / 93 assertions** |
+| `prepare-env.sh` under `dash` in a scratch folder | With a project and port: both written, with `APP_URL`. Without them: the `.env` is as before. A bad name or port is refused before anything is written |
+| `docker compose config`, with and without `COMPOSE_PROJECT_NAME` in `.env` | `fleetfuel-copy` / `fleetfuel-copy-app:dev` / `fleetfuel-copy_mysql-data` / port 8091, against `fleetfuel` / `fleetfuel-app:dev` / `fleetfuel_mysql-data`. The development names are unchanged |
+| `sh docker/bin/check-compose-project.sh` in the development checkout | exit 0 |
+| `make audit` | No advisories (Composer for the app and the simulator, npm) |
+| Deliberate breakages M1–M7 (file changed in place, tests run, file restored and checksum-verified) | All 7 caught; see the list below this table |
+| `make verify` #1 | Stopped at `analyse`, with **4 Larastan errors** in new test code: a Symfony versus Laravel response type, route collections iterated without `getRoutes()`, an always-true assertion. Fixed |
+| `make verify` #2 | exit 0 in 4 min 05 s:<br>Pint PASS on 317 files;<br>Larastan `[OK] No errors` and simulator PHPStan `[OK] No errors`;<br>**590 tests / 5972 assertions** (201.78 s);<br>`npm test` 14 passed;<br>npm 0 vulnerabilities;<br>Vite build OK |
+| `DocumentationParityTest` while writing the docs | It caught two of my own mistakes:<br>a link to `RELEASE-VERIFICATION.md` before the file existed;<br>a placeholder URL `http://localhost:8080/…` in that file.<br>Both fixed: **5 passed / 112 assertions** |
+| Local commit `1756382`, then the rehearsal from a clone in `/tmp` | The project check refused the unnamed clone correctly. Then **"mounts denied"**: Docker Desktop for Linux shares only some host folders with its VM (by default the home directory). The partial `fleetfuel-rehearsal` network and empty volume were removed, and the requirement was added to the README and docs/09 |
+| The rehearsal again, from `/home/wassim/code/FleetFuel-Portal-m10-rehearsal` | **A.** Unnamed `make setup`: refused before building (exit 2).<br>**B.** `COMPOSE_PROJECT_NAME=fleetfuel-rehearsal APP_PORT=8092 make setup`: exit 0 in 58 s; `/health` ok, `/login` 200.<br>**`make verify`:** exit 0 in 246 s: Pint 317 files, Larastan OK twice, **590 tests / 5987 assertions** (199.07 s), 14 JS tests, 0 vulnerabilities, build OK.<br>**Repeated-setup check:** PASS.<br>**`make audit`:** no advisories.<br>**`git status`:** clean |
+| The development stack afterwards (read-only) | Containers not recreated (up 5 hours, MySQL 3 days); `/health` ok; 36 purchases, 5 users |
+| Rehearsal teardown | `down -v` for `fleetfuel-rehearsal` only, its image removed, the folder deleted. Remaining: `fleetfuel_mysql-data`, `fleetfuel_default`, `fleetfuel-app:dev` and the four development containers |
+| Inside the running `app` and `scheduler` containers | The new config and service code are visible, and `route:list --path=storage` finds no route, so no restart is needed |
+
+Deliberate breakages:
+- **M1**, a historical limit change judged against the current month: `LedgerFixtureBuilderTest` failed (1).
+- **M2**, lock timeouts rethrown instead of retried: the contention test failed (500, not 503).
+- **M3**, query bindings unmasked: `ErrorResponsesTest` and `ProductionBootTest` failed.
+- **M4**, local-disk serving back on: the guest sweep failed (the storage route answered a guest).
+- **M5**, `APP_DEBUG=true` in the production boot: `ProductionBootTest` failed.
+- **M6**, a README line with an unknown make target, Artisan command, endpoint, local URL and link: all 5 parity checks failed.
+- **M7**, `Retry-After` made required on every POS 503: the contract test failed for `rate_unavailable`, which sends none. A first M7 that switched the header check off entirely passed, as expected, because every response sends its required headers. It proved nothing, so it was replaced.
+
+### Not run or not verified
+
+- GitHub CI for the M10 commit (reported in the session reply after the push).
+- The hosted deployment, HTTPS, secure cookies, backups and restore (M11).
+- Newman: not rerun in M10. The simulator suite covers the POS scenarios on every run.
+- Browser checks: not repeated (no UI changed in M10). The phone-overflow guard is still the manual Chrome sweep.
+- `check-compose-project.sh` has no automated test. It was exercised in the rehearsal (refusal) and in the development checkout (pass). It cannot see a project whose containers were removed.
+- MySQL's duplicate-key messages still quote the duplicated value (recorded as a limitation).
+- Carried over: the simulator with a host PHP outside Docker, SQL Server (S01).
+
+### Decisions and deviations
+
+All are in `docs/DECISIONS.md` (2026-10-01, M10):
+- the seed's limit change through the service, and audit history not rewritten;
+- masked query bindings;
+- the optional `Retry-After` and the required headers;
+- the second-copy project name, port and check;
+- local-disk serving off and the public-route list;
+- `make audit` outside `verify`;
+- T35 tested in-process.
+
+No product rule changed. `openapi.json` changed in documentation only (0.10.0).
+
+### Remaining work and blockers
+
+None for M10.
+- M11 needs your decisions on hosting, the demo policy and the license before anything is published. The production image, runbooks and README can be prepared and verified locally first.
+
+**Suggested commit message:** `test: complete release checks and clean-clone verification`.
+
+**One concept to explain:** a release check only proves something if it can fail, in an environment that cannot touch real data.
+- **Each claim points to a test, and each new test was broken on purpose once.** Switching the masking off, the retry off or the debug flag on made the matching test fail. A check that cannot fail, like the first M7, proves nothing.
+- **The clean clone tests the instructions, not just the code.** A fresh copy had only the tracked files and the README's commands. It set itself up, passed every gate and left no tracked file changed. That shows nothing depends on files that exist only on the developer's machine.
+- **Isolation is a naming problem in Docker Compose.** Containers, networks, volumes and images are named after the project. Two copies with one name share one database. Giving the copy its own project name and port, and refusing to start someone else's project, is what made the rehearsal safe next to the real development stack.
+
+## Earlier session: M09
 
 **Date / milestone:** 2026-10-01, M09 dashboard and UI finish.
 
@@ -235,7 +346,7 @@ The throwaway server was stopped afterwards, `fleetfuel_test_screens` dropped, t
 
 ### Not run or not verified
 
-- GitHub CI for the M09 commit (reported in the session reply after the push).
+- GitHub CI for the M09 commit was not observed when this log was written. It was checked after the push: run 36874363104 passed (580 tests / 5716 assertions, 14 JavaScript tests).
 - A real screen reader (NVDA, VoiceOver): I checked the accessibility tree, focus order and ARIA attributes, not spoken output.
 - Real phone hardware and browsers other than Chrome (Firefox, Safari). The phone checks used Chrome's device emulation.
 - An automated accessibility audit (axe, Lighthouse). The sidebar colours' contrast was computed by formula, not measured with a tool.

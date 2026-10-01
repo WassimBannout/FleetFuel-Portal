@@ -2,7 +2,7 @@
 
 A Laravel/MySQL portfolio application, in progress, for corporate fuel cards, station POS transactions, diesel deliveries, and USD/LBP reports. All companies, people and prices are fictional.
 
-**Current status: M09 dashboard and UI done.** The Docker stack runs locally, with the constrained database schema and a deterministic demo seed. Sign-in, roles and company/station isolation work, and API tokens can be issued and revoked. Admins manage companies, stations and products; admins and managers manage vehicles, drivers and fuel cards, with audited quota and block controls. Admins publish LBP prices on an append-only timeline and monitor USD/LBP rates, which a daily `rates:sync` stores with bounded fallback and audited manual overrides. Stations submit fuel purchases through the API, where retries are safe and quotas hold under concurrent use. The API also serves stations, prices, card quota and block changes, vehicles and drivers; its OpenAPI contract is validated against the real responses. A standalone POS simulator and a Postman collection exercise it end to end. Managers request diesel deliveries, and admins schedule, dispatch and deliver them, with an audited status timeline that concurrent clicks cannot corrupt. Reports cover consumption, top stations, quota exceptions, anomalies, a fuel-efficiency estimate and delivery times, with a scoped accounting CSV. A role-scoped dashboard, a filterable transaction list whose live totals match its CSV, an admin audit log and a responsive, keyboard-usable layout complete the screens. Release verification (M10) and the final portfolio README (M11) remain. See [docs/PROGRESS.md](docs/PROGRESS.md).
+**Current status: M10 release verification done.** The Docker stack runs locally, with the constrained database schema and a deterministic demo seed. Sign-in, roles and company/station isolation work, and API tokens can be issued and revoked. Admins manage companies, stations and products; admins and managers manage vehicles, drivers and fuel cards, with audited quota and block controls. Admins publish LBP prices on an append-only timeline and monitor USD/LBP rates, which a daily `rates:sync` stores with bounded fallback and audited manual overrides. Stations submit fuel purchases through the API, where retries are safe and quotas hold under concurrent use. The API also serves stations, prices, card quota and block changes, vehicles and drivers; its OpenAPI contract is validated against the real responses. A standalone POS simulator and a Postman collection exercise it end to end. Managers request diesel deliveries, and admins schedule, dispatch and deliver them, with an audited status timeline that concurrent clicks cannot corrupt. Reports cover consumption, top stations, quota exceptions, anomalies, a fuel-efficiency estimate and delivery times, with a scoped accounting CSV. A role-scoped dashboard, a filterable transaction list whose live totals match its CSV, an admin audit log and a responsive, keyboard-usable layout complete the screens. Every acceptance case has been audited against the tests, the setup was rehearsed from a clean clone, and the app was checked booting in production mode ([release verification](docs/RELEASE-VERIFICATION.md), [a debugging story](docs/DEBUGGING-STORY.md)). Deployment and the final portfolio README (M11) remain. See [docs/PROGRESS.md](docs/PROGRESS.md).
 
 | Dashboard (admin) | Transactions (manager) | Phone |
 | --- | --- | --- |
@@ -30,10 +30,21 @@ Then open <http://localhost:8080>. Readiness (app + database) is at `/health`; l
 | `make lint` / `make analyse` | Pint style check / Larastan (PHPStan level 6), then PHPStan level 6 for the POS simulator |
 | `make build` | `npm ci` and a production Vite build |
 | `make verify` | lint, analyse, test and build; stops at the first failure |
+| `make audit` | Check the locked Composer and npm dependencies against published security advisories (needs the network; CI runs it too) |
 | `make simulate` | Run the POS simulator against the running stack (`SCENARIO=all`, `success`, `replay`, `conflict`, `blocked` or `quota`); credentials from `POS_*` environment variables, see [tools/pos-simulator](tools/pos-simulator/README.md) |
 | `make logs` / `make shell` | Recent service logs / a shell in the app container |
 
 To run other Artisan commands: `docker compose exec app php artisan <command>`.
+
+### A second copy on one machine
+
+Containers, the database volume and the PHP image are named after the Compose project, `fleetfuel` by default. A second clone of the repository on the same machine needs its own project name and port, set for its first setup:
+
+```bash
+COMPOSE_PROJECT_NAME=fleetfuel-copy APP_PORT=8081 make setup   # then open http://localhost:8081
+```
+
+Clone it under your home directory: Docker Desktop shares only some host folders with its containers (by default your home, not `/tmp`), and a copy elsewhere fails with "mounts denied". `make setup` writes both values into the new copy's `.env`, so later commands keep using them. Without them, `make setup`, `make up` and `make test` stop with an explanation instead of taking over the first copy's containers and database. The optional Mailpit container always uses port 8025, so run it in one copy at a time.
 
 ## Demo data
 
@@ -206,6 +217,9 @@ API clients (the POS, Postman) use a bearer token, never the browser session:
 | [Tests](docs/07-TEST-PLAN.md) | Acceptance cases and verification strategy |
 | [Build plan](docs/08-BUILD-PLAN.md) | Ordered milestones and completion gates |
 | [Shipping](docs/09-OPERATIONS-AND-PORTFOLIO.md) | Deployment, demo, README and interview preparation |
+| [Release verification](docs/RELEASE-VERIFICATION.md) | Acceptance cases, quality gates, clean-clone rehearsal and limitations (M10) |
+| [Debugging story](docs/DEBUGGING-STORY.md) | A real bug, its cause and the tests that keep it fixed |
+| [M10 pull request](docs/M10-PULL-REQUEST.md) | The reviewable description of the release-verification change |
 | [Progress](docs/PROGRESS.md) | Durable session handoff |
 | [Decisions](docs/DECISIONS.md) | Defaults and deliberate deviations from source |
 | [Sources](docs/SOURCES.md) | Verified technical references |

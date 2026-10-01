@@ -46,8 +46,10 @@ trait ChecksOpenApiContract
         $documented = $operation->responses->{$status} ?? null;
         $this->assertInstanceOf(stdClass::class, $documented, "openapi.json does not document HTTP {$status} for {$method} {$path}: ".$response->getContent());
 
-        foreach (array_keys((array) ($documented->headers ?? [])) as $header) {
-            $this->assertTrue($response->headers->has($header), "HTTP {$status} of {$method} {$path} must send the {$header} header.");
+        foreach ((array) ($documented->headers ?? []) as $header => $definition) {
+            if ($definition->required ?? false) {
+                $this->assertTrue($response->headers->has($header), "HTTP {$status} of {$method} {$path} must send the {$header} header.");
+            }
         }
 
         if (! isset($documented->content)) {

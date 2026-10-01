@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "FleetFuel Portal API",
-    "version": "0.8.0",
+    "version": "0.10.0",
     "description": "REST API of the FleetFuel Portal, a fictional portfolio project. Every operation is served and checked against real responses by tests/Feature/Api/OpenApiContractTest.php and the per-endpoint API tests; x-abilities (all required), x-any-abilities (at least one required) and x-roles are compared with the route middleware, and x-status records that each operation is implemented. Business details: docs/04-BUSINESS-RULES.md and docs/05-API-CONTRACT.md."
   },
   "servers": [
@@ -108,7 +108,8 @@
                 "schema": {
                   "type": "integer"
                 },
-                "description": "Seconds until retry."
+                "description": "Seconds until retry.",
+                "required": true
               }
             }
           },
@@ -209,7 +210,8 @@
                 "schema": {
                   "type": "integer"
                 },
-                "description": "Seconds until retry."
+                "description": "Seconds until retry.",
+                "required": true
               }
             }
           },
@@ -331,7 +333,8 @@
                 "schema": {
                   "type": "integer"
                 },
-                "description": "Seconds until retry."
+                "description": "Seconds until retry.",
+                "required": true
               }
             }
           },
@@ -462,7 +465,8 @@
                 "schema": {
                   "type": "integer"
                 },
-                "description": "Seconds until retry."
+                "description": "Seconds until retry.",
+                "required": true
               }
             }
           },
@@ -536,7 +540,8 @@
                 "schema": {
                   "type": "string",
                   "const": "true"
-                }
+                },
+                "required": true
               }
             }
           },
@@ -563,7 +568,8 @@
                 "schema": {
                   "type": "string"
                 },
-                "description": "Transaction detail URI."
+                "description": "Transaction detail URI.",
+                "required": true
               }
             }
           },
@@ -641,7 +647,8 @@
                 "schema": {
                   "type": "integer"
                 },
-                "description": "Seconds until retry."
+                "description": "Seconds until retry.",
+                "required": true
               }
             }
           },
@@ -656,12 +663,21 @@
             }
           },
           "503": {
-            "description": "Rate unavailable or bounded contention retries exhausted.",
+            "description": "No valid exchange rate (rate_unavailable), or the bounded contention retries ran out (temporarily_unavailable). Nothing is recorded.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "required": false,
+                "description": "Sent with temporarily_unavailable: retry the same request after this many seconds (1). Absent for rate_unavailable."
               }
             }
           }
@@ -781,7 +797,8 @@
                 "schema": {
                   "type": "integer"
                 },
-                "description": "Seconds until retry."
+                "description": "Seconds until retry.",
+                "required": true
               }
             }
           },
@@ -918,7 +935,8 @@
                 "schema": {
                   "type": "integer"
                 },
-                "description": "Seconds until retry."
+                "description": "Seconds until retry.",
+                "required": true
               }
             }
           },
@@ -1039,7 +1057,8 @@
                 "schema": {
                   "type": "integer"
                 },
-                "description": "Seconds until retry."
+                "description": "Seconds until retry.",
+                "required": true
               }
             }
           },
@@ -1185,7 +1204,8 @@
                 "schema": {
                   "type": "integer"
                 },
-                "description": "Seconds until retry."
+                "description": "Seconds until retry.",
+                "required": true
               }
             }
           },
@@ -1332,7 +1352,8 @@
                 "schema": {
                   "type": "integer"
                 },
-                "description": "Seconds until retry."
+                "description": "Seconds until retry.",
+                "required": true
               }
             }
           },
@@ -1456,7 +1477,8 @@
                 "schema": {
                   "type": "integer"
                 },
-                "description": "Seconds until retry."
+                "description": "Seconds until retry.",
+                "required": true
               }
             }
           },
@@ -1592,7 +1614,8 @@
                 "schema": {
                   "type": "integer"
                 },
-                "description": "Seconds until retry."
+                "description": "Seconds until retry.",
+                "required": true
               }
             }
           },
@@ -1716,7 +1739,8 @@
                 "schema": {
                   "type": "integer"
                 },
-                "description": "Seconds until retry."
+                "description": "Seconds until retry.",
+                "required": true
               }
             }
           },
@@ -1851,7 +1875,8 @@
                 "schema": {
                   "type": "integer"
                 },
-                "description": "Seconds until retry."
+                "description": "Seconds until retry.",
+                "required": true
               }
             }
           },
@@ -1929,7 +1954,8 @@
                 "schema": {
                   "type": "string"
                 },
-                "description": "Delivery order detail URI."
+                "description": "Delivery order detail URI.",
+                "required": true
               }
             }
           },
@@ -1997,7 +2023,8 @@
                 "schema": {
                   "type": "integer"
                 },
-                "description": "Seconds until retry."
+                "description": "Seconds until retry.",
+                "required": true
               }
             }
           },
@@ -2122,7 +2149,8 @@
                 "schema": {
                   "type": "integer"
                 },
-                "description": "Seconds until retry."
+                "description": "Seconds until retry.",
+                "required": true
               }
             }
           },
@@ -2260,7 +2288,8 @@
                 "schema": {
                   "type": "integer"
                 },
-                "description": "Seconds until retry."
+                "description": "Seconds until retry.",
+                "required": true
               }
             }
           },
@@ -2399,7 +2428,8 @@
                 "schema": {
                   "type": "integer"
                 },
-                "description": "Seconds until retry."
+                "description": "Seconds until retry.",
+                "required": true
               }
             }
           },
@@ -2461,7 +2491,8 @@
               "Content-Disposition": {
                 "schema": {
                   "type": "string"
-                }
+                },
+                "required": true
               }
             },
             "content": {
@@ -2536,7 +2567,8 @@
                 "schema": {
                   "type": "integer"
                 },
-                "description": "Seconds until retry."
+                "description": "Seconds until retry.",
+                "required": true
               }
             }
           },

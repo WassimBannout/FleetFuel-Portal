@@ -13,6 +13,8 @@ Troubleshooting order: identify failing service/route; inspect safe logs; verify
 | Composer unavailable on host | Use `app`/tooling container; don't change machine-wide PHP to solve a container problem |
 | Docker socket inaccessible | Check daemon/context/user access; explain required local permission change |
 | Web port occupied | Change documented local host port/APP_URL together |
+| A second checkout on the same machine | Give it its own `COMPOSE_PROJECT_NAME` and `APP_PORT` (README, "A second copy on one machine"); `make setup` refuses to take over another checkout's containers |
+| Docker Desktop: "mounts denied … is not shared from the host" | The checkout is outside the folders Docker Desktop shares with its VM (by default the home directory; `/tmp` is not shared). Move it under your home directory, or add the folder in Docker Desktop's Resources → File sharing |
 | Database connection fails | Service hostname `mysql`, health, credentials, correct DB; never localhost inside app container |
 | APP_KEY or cached env wrong | Preserve key, inspect config cache; do not regenerate a key on every restart |
 | Assets missing | Run locked frontend build, check manifest and mounted directory |

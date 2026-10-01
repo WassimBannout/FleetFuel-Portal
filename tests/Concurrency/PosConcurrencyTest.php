@@ -22,7 +22,10 @@ use App\Support\PosPurchase;
 use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Testing\TestResponse;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Process\Process;
+use Tests\Concerns\ChecksOpenApiContract;
 use Tests\Concerns\RunsConcurrentWorkers;
 use Tests\Concerns\SubmitsPosRequests;
 use Tests\Concerns\UsesCommittedDatabase;
@@ -44,6 +47,7 @@ use Throwable;
  */
 class PosConcurrencyTest extends TestCase
 {
+    use ChecksOpenApiContract;
     use RunsConcurrentWorkers;
     use SubmitsPosRequests;
     use UsesCommittedDatabase;
@@ -311,6 +315,41 @@ class PosConcurrencyTest extends TestCase
 
         $this->assertSame('blocked', $this->workerResult($worker)['card_status']);
         $this->assertSame(1, FuelTransaction::query()->count());
+        $this->assertUsage($world['card'], '20.00');
+    }
+
+    /**
+     * Contention that outlasts the bounded retries (docs/05-API-CONTRACT.md,
+     * "Contention"): the card stays locked while all three attempts time out
+     * waiting for it, so the answer is 503 temporarily_unavailable with
+     * Retry-After: 1 and nothing is recorded. The same request is accepted
+     * once the card is free.
+     */
+    public function test_contention_that_outlasts_the_retries_is_a_503_and_records_nothing(): void
+    {
+        $world = $this->world();
+        $job = [
+            'action' => 'purchase',
+            'token' => $world['tokenA'],
+            'payload' => $this->posPayload($world['card']->card_no, ['external_ref' => 'BUSY-1', 'transacted_at' => $this->fiveMinutesAgo()]),
+        ];
+
+        $result = [];
+        $this->whileHoldingCardLocks([$world['card']->id], function () use ($job, &$result): void {
+            $result = $this->workerResult($this->startWorker($job + ['lock_wait_timeout' => 1]));
+        });
+
+        $this->assertSame(503, $result['status']);
+        $this->assertSame('temporarily_unavailable', $result['body']['error']['code']);
+        $this->assertSame('1', $result['retry_after']);
+        $this->assertMatchesOpenApi(TestResponse::fromBaseResponse(new Response(
+            $result['content'], 503, ['Content-Type' => 'application/json', 'Retry-After' => $result['retry_after']],
+        )), 'post', '/transactions');
+        $this->assertSame(0, FuelTransaction::query()->count());
+        $this->assertSame(0, CardMonthlyUsage::query()->count());
+
+        $retry = $this->workerResult($this->startWorker($job));
+        $this->assertSame(201, $retry['status']);
         $this->assertUsage($world['card'], '20.00');
     }
 

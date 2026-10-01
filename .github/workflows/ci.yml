@@ -1,6 +1,6 @@
 # Runs the same Makefile contract a developer uses, so CI proves that a clean
 # checkout can set up the Docker stack and pass every quality gate.
-# Later milestones extend it (docs/07-TEST-PLAN.md, "CI progression").
+# docs/07-TEST-PLAN.md, "CI progression", lists what each milestone added.
 name: CI
 
 on:
@@ -37,6 +37,9 @@ jobs:
 
       - name: Repeated setup keeps key, credentials and data
         run: sh docker/bin/check-setup-preserves-state.sh
+
+      - name: Dependency security advisories
+        run: make audit
 
       - name: Service logs
         if: failure()

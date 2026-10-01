@@ -20,13 +20,17 @@ NODE   := $(COMPOSE) run --rm --no-deps node
 CHECK_READY := $(COMPOSE) exec -T web wget -q -O /dev/null http://127.0.0.1/health \
 	|| { echo "Readiness check failed: http://localhost/health did not return 200 (see make logs)"; exit 1; }
 
-.PHONY: help setup up down test lint analyse build verify simulate logs shell
+# Stops before a second checkout takes over this project's containers and volume.
+CHECK_PROJECT := sh docker/bin/check-compose-project.sh
+
+.PHONY: help setup up down test lint analyse build verify audit simulate logs shell
 
 help: ## List the available commands
 	@grep -E '^[a-z]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  make %-8s %s\n", $$1, $$2}'
 
 setup: ## Build, install, migrate and start; safe to repeat (keeps .env, key and data)
 	sh docker/bin/prepare-env.sh
+	@$(CHECK_PROJECT)
 	$(COMPOSE) build app
 	$(PHP) composer install --no-interaction --prefer-dist
 	@grep -Eq '^APP_KEY=.+' .env || $(PHP) php artisan key:generate --no-interaction
@@ -42,6 +46,7 @@ setup: ## Build, install, migrate and start; safe to repeat (keeps .env, key and
 	@echo "Demo accounts (e.g. admin@fleetfuel.test) use DEMO_PASSWORD from .env; see README."
 
 up: ## Start the existing stack without changing data
+	@$(CHECK_PROJECT)
 	$(COMPOSE) up -d --wait app web scheduler
 	@$(CHECK_READY)
 
@@ -49,6 +54,7 @@ down: ## Stop the stack; database volumes are kept
 	$(COMPOSE) --profile mail down --remove-orphans
 
 test: ## Run PHPUnit against the isolated fleetfuel_test MySQL database, then the JavaScript unit tests
+	@$(CHECK_PROJECT)
 	@# The Integration suite runs the standalone POS simulator, so install its locked dependencies.
 	$(PHP) composer install --working-dir=tools/pos-simulator --no-interaction --quiet
 	$(PHP_DB) php artisan test
@@ -71,6 +77,13 @@ verify: ## Run lint, analyse, test and build; stops at the first failure
 	$(MAKE) analyse
 	$(MAKE) test
 	$(MAKE) build
+
+# Not part of verify: it needs the network, and its answer changes whenever a
+# new advisory is published, even when the code does not.
+audit: ## Check the locked Composer and npm dependencies against published security advisories
+	$(PHP) composer audit --locked
+	$(PHP) composer audit --locked --working-dir=tools/pos-simulator
+	$(NODE) npm audit --audit-level=low
 
 # The simulator reaches nginx as http://web inside the Compose network. Its
 # credentials are passed through from your shell environment only

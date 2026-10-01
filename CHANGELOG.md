@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- M10 release verification:
+  - Acceptance cases T01–T35 audited against the tests (docs/RELEASE-VERIFICATION.md); the missing ones now have tests:
+    - T35: `ProductionBootTest` serves real HTTP from `php artisan optimize` caches in production mode, with debug off.
+    - The contention 503 (`temporarily_unavailable`, `Retry-After: 1`) runs for real behind a held card lock.
+    - Every route except six public ones is checked to refuse a guest.
+  - Fixed: a failed query's logged message contained its bound values (card numbers, emails, session IDs); the MySQL connection now masks them.
+  - Fixed: the demo seed audited its quota cut as `fuel_card.limits_changed` while the screens write `card.limits_changed`; the seed now goes through `FuelCardService`.
+  - Fixed: a second clone on the same machine would take over the first one's containers and database volume. `COMPOSE_PROJECT_NAME` and `APP_PORT` can be set for the first `make setup`, the PHP image is named after the project, and `make setup`/`up`/`test` refuse to start another checkout's project.
+  - Removed the unused public `/storage/{path}` routes (local-disk serving is off; the app stores no files).
+  - `openapi.json` 0.10.0: the contention 503 documents its optional `Retry-After`, and the always-sent headers are marked required.
+  - `DocumentationParityTest`: every documented make target, Artisan command, endpoint, local URL and relative link must exist.
+  - `make audit` (Composer and npm advisories), also a CI step. No advisories found.
+  - A clean-clone rehearsal in an isolated Compose project, and a debugging story (docs/DEBUGGING-STORY.md).
 - M09 dashboard and UI finish:
   - Layout: a navy sidebar that becomes a Menu button and off-canvas panel on phones, role-based links, a "Skip to main content" link, visible keyboard focus, and plain-language error pages (403, 404, 419, 429, 5xx).
   - Dashboard: this month next to last month, quota warnings with reasons, open deliveries, and the USD/LBP rate in use with its source.

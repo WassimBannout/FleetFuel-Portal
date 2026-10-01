@@ -2,6 +2,7 @@
 # Use the Makefile (make setup, make up, make test, ...) instead of calling
 # these services directly; docs/02-ARCHITECTURE.md describes the contract.
 # Values such as ${DB_PASSWORD} are read from .env, which `make setup` creates.
+# COMPOSE_PROJECT_NAME in .env overrides this name for a second copy.
 name: fleetfuel
 
 x-php-service: &php-service
@@ -10,7 +11,8 @@ x-php-service: &php-service
         args:
             UID: ${HOST_UID:-1000}
             GID: ${HOST_GID:-1000}
-    image: fleetfuel-app:dev
+    # Named after the project, so a second copy never rebuilds this copy's image.
+    image: ${COMPOSE_PROJECT_NAME:-fleetfuel}-app:dev
     volumes:
         - .:/var/www/html
     depends_on:

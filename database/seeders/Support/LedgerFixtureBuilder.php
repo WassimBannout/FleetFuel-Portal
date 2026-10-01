@@ -17,6 +17,7 @@ use App\Models\Product;
 use App\Models\Station;
 use App\Models\User;
 use App\Services\DeliveryOrderService;
+use App\Services\FuelCardService;
 use App\Services\FuelTransactionService;
 use Carbon\CarbonImmutable;
 use Closure;
@@ -36,14 +37,17 @@ use LogicException;
  *   window, replays) are skipped, because the purpose is to record the past.
  * - Delivery orders go through DeliveryOrderService's historical methods,
  *   the code the web screens and the API use, judged at the given time.
- * - Quota changes and manual rate overrides write their audit rows in the
- *   same transaction as the change.
+ * - Quota changes go through FuelCardService::updateLimitsHistorical(), so
+ *   their audit rows are the ones a live change writes.
+ * - Manual rate overrides write their audit row in the same transaction as
+ *   the override (the live service refuses a start in the past).
  */
 final class LedgerFixtureBuilder
 {
     public function __construct(
         private readonly FuelTransactionService $transactions,
         private readonly DeliveryOrderService $deliveries,
+        private readonly FuelCardService $cards,
     ) {}
 
     public function recordPurchase(
@@ -72,29 +76,20 @@ final class LedgerFixtureBuilder
     }
 
     /**
-     * Change a card's monthly limits under the card lock and audit the old and
-     * new values of the fields that changed.
+     * Change a card's monthly limits at $at with the rules and audit row of a
+     * live change (FuelCardService). A limit missing from $limits is kept.
      *
      * @param  array{monthly_limit_l?: ?string, monthly_limit_usd?: ?string}  $limits
      */
     public function changeMonthlyLimits(FuelCard $card, User $actor, array $limits, CarbonImmutable $at): FuelCard
     {
-        return DB::transaction(function () use ($card, $actor, $limits, $at): FuelCard {
-            $card = FuelCard::query()->lockForUpdate()->findOrFail($card->id);
-
-            $old = [];
-            foreach ($limits as $field => $value) {
-                $old[$field] = $card->{$field};
-                $card->{$field} = $value;
-            }
-
-            $card->updated_at = $at;
-            $card->save();
-
-            $this->audit($actor, 'fuel_card.limits_changed', $card->getMorphClass(), $card->id, $card->company_id, $old, $limits, $at);
-
-            return $card;
-        });
+        return $this->refusalsAsLogicErrors('limit change', fn (): FuelCard => $this->cards->updateLimitsHistorical(
+            $card,
+            array_key_exists('monthly_limit_l', $limits) ? $limits['monthly_limit_l'] : $card->monthly_limit_l,
+            array_key_exists('monthly_limit_usd', $limits) ? $limits['monthly_limit_usd'] : $card->monthly_limit_usd,
+            $actor,
+            $at,
+        ));
     }
 
     /**

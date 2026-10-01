@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
@@ -62,6 +63,29 @@ class ErrorResponsesTest extends TestCase
         // The details go to the server log instead.
         $log->shouldHaveReceived('error')
             ->withArgs(fn (string $message): bool => str_contains($message, 'Internal detail ZX-9'))
+            ->once();
+    }
+
+    /**
+     * A failed query's exception message is what Laravel logs. By default it
+     * writes the bound values into the SQL: here a card number, elsewhere an
+     * email or a session ID. The MySQL connection masks them (CLAUDE.md:
+     * credentials and card identifiers never reach the logs).
+     */
+    public function test_a_failed_query_is_logged_without_its_bound_values(): void
+    {
+        $log = Log::spy();
+
+        Route::middleware('api')->get('/api/v1/testing/bad-query', function (): void {
+            DB::select('SELECT * FROM fuel_cards WHERE card_no = ? AND no_such_column = 1', ['FF-ATLAS-001']);
+        });
+
+        $this->getJson('/api/v1/testing/bad-query')->assertStatus(500)->assertJsonPath('error.code', 'internal_error');
+
+        $log->shouldHaveReceived('error')
+            ->withArgs(fn (string $message): bool => str_contains($message, 'Unknown column')
+                && str_contains($message, 'card_no = ?')
+                && ! str_contains($message, 'FF-ATLAS-001'))
             ->once();
     }
 

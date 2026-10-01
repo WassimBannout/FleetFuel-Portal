@@ -225,7 +225,7 @@ class FuelCardScreensTest extends TestCase
         $this->assertSame('80.00', $card->monthly_limit_l);
         $this->assertNull($card->monthly_limit_usd, 'an empty limit means unlimited');
 
-        $audit = AuditLog::query()->where('action', 'card.limits_changed')->sole();
+        $audit = AuditLog::query()->where('action', 'card.limits_changed')->where('auditable_id', $card->id)->sole();
         $this->assertSame($manager->id, $audit->user_id);
         $this->assertEquals(['monthly_limit_l' => '100.00', 'monthly_limit_usd' => '100.00'], $audit->old_values);
         $this->assertEquals(['monthly_limit_l' => '80.00', 'monthly_limit_usd' => null, 'below_current_usage' => false], $audit->new_values);
@@ -233,7 +233,7 @@ class FuelCardScreensTest extends TestCase
 
         // Saving the same values again writes nothing.
         $this->patch(route('cards.limits', $card), ['monthly_limit_l' => '80.00', 'monthly_limit_usd' => '']);
-        $this->assertSame(1, AuditLog::query()->where('action', 'card.limits_changed')->count());
+        $this->assertSame(1, AuditLog::query()->where('action', 'card.limits_changed')->where('auditable_id', $card->id)->count());
     }
 
     public function test_lowering_a_limit_below_this_months_usage_needs_confirmation(): void
@@ -262,7 +262,7 @@ class FuelCardScreensTest extends TestCase
         ])->assertSessionHasNoErrors();
 
         $this->assertSame('1.00', $card->refresh()->monthly_limit_l);
-        $audit = AuditLog::query()->where('action', 'card.limits_changed')->sole();
+        $audit = AuditLog::query()->where('action', 'card.limits_changed')->where('auditable_id', $card->id)->sole();
         $this->assertTrue($audit->new_values['below_current_usage'] ?? null);
         $this->get(route('cards.show', $card))->assertSee('Over quota this month');
     }

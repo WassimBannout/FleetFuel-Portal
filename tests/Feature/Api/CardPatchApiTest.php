@@ -64,7 +64,7 @@ class CardPatchApiTest extends TestCase
             'status' => 'active',
         ]]);
 
-        $audit = AuditLog::query()->where('action', 'card.limits_changed')->sole();
+        $audit = AuditLog::query()->where('action', 'card.limits_changed')->where('auditable_id', $card->id)->sole();
         $this->assertSame($this->atlasManager()->id, $audit->user_id);
         $this->assertEquals(['monthly_limit_l' => '400.00', 'monthly_limit_usd' => '400.00'], $audit->old_values);
         $this->assertEquals(['monthly_limit_l' => '100.00', 'monthly_limit_usd' => '400.00', 'below_current_usage' => true], $audit->new_values);
