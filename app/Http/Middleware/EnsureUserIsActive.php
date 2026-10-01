@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use Closure;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
@@ -15,6 +16,8 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class EnsureUserIsActive
 {
+    private const DISABLED = 'Your account has been disabled. Contact an administrator.';
+
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
@@ -24,8 +27,13 @@ class EnsureUserIsActive
             $request->session()->invalidate();
             $request->session()->regenerateToken();
 
-            return redirect()->route('login')
-                ->with('status', 'Your account has been disabled. Contact an administrator.');
+            // A page script gets 401, like a signed-out session, instead of
+            // the sign-in page as a 200 it cannot read.
+            if ($request->expectsJson()) {
+                throw new AuthenticationException(self::DISABLED);
+            }
+
+            return redirect()->route('login')->with('status', self::DISABLED);
         }
 
         return $next($request);

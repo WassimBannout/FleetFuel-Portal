@@ -88,7 +88,7 @@ The Composer container must run on the chosen PHP version with matching extensio
 | `make setup` | Build images; copy example env only if absent; install locked dependencies; create key only if absent; start DB and wait for health; migrate; seed only an empty local demo; build assets; start web/app/scheduler |
 | `make up` | Start existing local stack, preserving state |
 | `make down` | Stop stack without deleting volumes |
-| `make test` | Run tests against isolated `fleetfuel_test` MySQL database |
+| `make test` | Run tests against isolated `fleetfuel_test` MySQL database, then the JavaScript unit tests (`npm test`) |
 | `make lint` | Run Pint in check mode |
 | `make analyse` | Run Larastan at an initially practical level, default 6; no blanket ignore baseline |
 | `make build` | Install locked frontend dependencies and compile production assets |

@@ -316,3 +316,40 @@ Template: date, affected decision, old/new behavior, reason, spec/test updates, 
 - Screens: one page per report under `/reports` with a shared date and company filter. The CSV form on the consumption page uses the same dates and company. Card numbers are masked as on the card list. A manager's `company_id` in the URL is ignored, as on the other web lists (the API refuses it).
 - Postman folder 04 is self-contained like folder 03, with its own manager token, revoked at the end. It checks that the three groupings, the ledger totals and the CSV agree for a 360-day range computed at run time.
 
+2026-10-01 (M09): Dashboard and UI finish. No product rule and no API changed. The points below fill in details the specs leave open.
+
+- Layout: the dark navy sidebar of the UI spec.
+  - It stays in place from 992 px (Bootstrap `lg`) and becomes an off-canvas menu below that: a modal dialog with focus inside, closed with Escape, focus returned to the Menu button.
+  - Links are grouped (Overview, Fleet, Reference data, Administration), and each appears only when the page's policy allows it.
+  - There is a "Skip to main content" link and a visible focus outline on the dark background. The wrapper is a plain `div`, so the only landmark is the `<nav>`.
+- Audit screen (`/audit`, admins): the UI-spec screen deferred in M03 as "later UI work". It lands with the UI finish because F10 needs it in the MVP.
+  - Filters: the person (or "system" for the command line), action, record type (an allowlist of morph aliases, never a class name), company and Beirut dates.
+  - Values go through `App\Support\AuditDisplay`: fields named like credentials are shown as `[redacted]` and `card_no` is masked. This is a second line of defense; services already audit selected business fields only.
+- Transaction list (`/transactions`, every role, scoped with `visibleTo`):
+  - It uses the same request rules as the API list and the CSV (`FiltersTransactions`), so the screen, the API and the CSV cover the same rows by construction.
+  - A manager's `company_id` is refused here, as on the API and the CSV. The report screens ignore it instead (M08).
+  - Invalid filters on the full page return to the unfiltered list with the messages (`$redirectRoute`), never to the broken address.
+- Totals and count: one aggregate query (`COUNT` and the `SUM`s) gives both the totals of the whole filter and the row count for the pager (`paginate(..., $total)`). The list therefore runs 6 queries whatever the number of rows; a test counts them, and without eager loading the same page ran 102.
+- AJAX design:
+  - `/transactions/results` returns JSON `{html, summary, url, from, to}`. The HTML is the same Blade partial as the full page, escaped on the server, so no row template is duplicated in JavaScript. A separate URL keeps the browser from caching a fragment under the page's address.
+  - Latest response wins: `createLatestOnly()` aborts the request in flight and ignores any answer that is not the newest, by sequence number. Aborting alone is not enough, because an answer may already be on its way.
+  - The filters live in the query string (`history.pushState`); back and forward fetch again. A new filter returns to page 1. The card number is matched exactly, as on the API; the field waits 400 ms after typing stops.
+  - An error replaces the results, so stale totals never look current. Network and server errors offer "Try again"; 401/419 offers "Sign in again". Field errors are linked with `aria-describedby` and `aria-invalid`, and a polite live region announces "Loading…" and then the count.
+- Web AJAX errors, which M02 left open: browser pages keep Laravel's JSON shapes (422 `{message, errors}`, 401 `{message}`, 419, and 409 business refusals `{message, code, details}`).
+  - Scripts show only the application's own 409/422 messages. Other statuses get a fixed message, because a debug-mode body can carry exception details.
+  - A disabled user's page script now gets 401 with the reason instead of the sign-in page (`EnsureUserIsActive`).
+- Error pages: 403, 404, 419, 429 and 5xx in the application's words, on a minimal layout that reads no session user and runs no query, so they render even with the database down.
+  - Laravel ships its own 429, 500 and 503 views, which would win over the 4xx/5xx fallbacks, so those three files extend ours.
+  - The 404 wording is the same for a missing record and another company's record.
+  - Observed in Chrome: Laravel 13 accepts the browser's `Sec-Fetch-Site: same-origin`, so a same-site form with an outdated token is not a 419. A signed-out user is sent to sign in and then back to the page they came from. The 419 page remains for clients without that header; its test runs the real CSRF middleware.
+- Dashboard:
+  - this month next to last month, in one grouped query (useful early in a month, and with demo data seeded a few days earlier);
+  - quota warnings from `ReportRepository::quotaExceptions` (the first five, with a link to the report);
+  - the first five open deliveries by scheduled or preferred start;
+  - the USD/LBP rate in use with its source and attribution, or a warning when none is valid (POS purchases are then refused, never converted at a guessed rate).
+
+  A test checks that its number of queries does not grow with the data.
+- Rate provenance: a badge in words (fixture, provider, manual override) on the transaction list, the purchase page and the dashboard.
+- A phone-layout bug found in the browser check, present since M03: screen-reader text in table cells (`.visually-hidden`, absolutely positioned) escaped `.table-responsive` because no ancestor was positioned. At 390 px it widened the dashboard, transactions, card, vehicle and product pages to up to 782 px. `.table-responsive { position: relative; }` keeps it inside the horizontal scroll.
+- JavaScript tests use Node's built-in runner (`npm test`); no package was added. The tested modules (`resources/js/lib`) import nothing. `make test` runs them after PHPUnit, so `make verify` and CI do too.
+- Screenshots are WebP files in `docs/screenshots`, taken on a throwaway seeded copy of the app, as documented there.

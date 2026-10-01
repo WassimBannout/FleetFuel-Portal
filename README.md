@@ -2,7 +2,13 @@
 
 A Laravel/MySQL portfolio application, in progress, for corporate fuel cards, station POS transactions, diesel deliveries, and USD/LBP reports. All companies, people and prices are fictional.
 
-**Current status: M08 reports and exports done.** The Docker stack runs locally, with the constrained database schema and a deterministic demo seed. Sign-in, roles and company/station isolation work, and API tokens can be issued and revoked. Admins manage companies, stations and products; admins and managers manage vehicles, drivers and fuel cards, with audited quota and block controls. Admins publish LBP prices on an append-only timeline and monitor USD/LBP rates, which a daily `rates:sync` stores with bounded fallback and audited manual overrides. Stations submit fuel purchases through the API, where retries are safe and quotas hold under concurrent use. The API also serves stations, prices, card quota and block changes, vehicles and drivers; its OpenAPI contract is validated against the real responses. A standalone POS simulator and a Postman collection exercise it end to end. Managers request diesel deliveries, and admins schedule, dispatch and deliver them, with an audited status timeline that concurrent clicks cannot corrupt. Reports cover consumption, top stations, quota exceptions, anomalies, a fuel-efficiency estimate and delivery times, with a scoped accounting CSV. The dashboard and UI finish come in M09. See [docs/PROGRESS.md](docs/PROGRESS.md).
+**Current status: M09 dashboard and UI done.** The Docker stack runs locally, with the constrained database schema and a deterministic demo seed. Sign-in, roles and company/station isolation work, and API tokens can be issued and revoked. Admins manage companies, stations and products; admins and managers manage vehicles, drivers and fuel cards, with audited quota and block controls. Admins publish LBP prices on an append-only timeline and monitor USD/LBP rates, which a daily `rates:sync` stores with bounded fallback and audited manual overrides. Stations submit fuel purchases through the API, where retries are safe and quotas hold under concurrent use. The API also serves stations, prices, card quota and block changes, vehicles and drivers; its OpenAPI contract is validated against the real responses. A standalone POS simulator and a Postman collection exercise it end to end. Managers request diesel deliveries, and admins schedule, dispatch and deliver them, with an audited status timeline that concurrent clicks cannot corrupt. Reports cover consumption, top stations, quota exceptions, anomalies, a fuel-efficiency estimate and delivery times, with a scoped accounting CSV. A role-scoped dashboard, a filterable transaction list whose live totals match its CSV, an admin audit log and a responsive, keyboard-usable layout complete the screens. Release verification (M10) and the final portfolio README (M11) remain. See [docs/PROGRESS.md](docs/PROGRESS.md).
+
+| Dashboard (admin) | Transactions (manager) | Phone |
+| --- | --- | --- |
+| ![Admin dashboard](docs/screenshots/dashboard-admin.webp) | ![Filtered transaction list with totals](docs/screenshots/transactions-manager.webp) | ![Manager dashboard on a phone](docs/screenshots/dashboard-manager-mobile.webp) |
+
+Real screenshots from Chrome on freshly seeded demo data; more, with how they were taken, in [docs/screenshots](docs/screenshots/README.md).
 
 Start with [START_HERE.md](START_HERE.md) to continue the build in Claude Code. It contains the milestone order and resume instructions.
 
@@ -20,7 +26,7 @@ Then open <http://localhost:8080>. Readiness (app + database) is at `/health`; l
 | --- | --- |
 | `make setup` | Create `.env`/`.env.testing` only if absent (with generated local DB passwords), build the PHP image, install locked dependencies, create keys only if missing, migrate, seed an empty database, build assets, start the stack |
 | `make up` / `make down` | Start or stop the stack; `down` keeps the MySQL volume |
-| `make test` | PHPUnit against the separate `fleetfuel_test` MySQL database, plus the concurrency suite on `fleetfuel_test_concurrency` (overlapping PHP processes) and the simulator suite on `fleetfuel_test_integration` (the app over real HTTP) |
+| `make test` | PHPUnit against the separate `fleetfuel_test` MySQL database, plus the concurrency suite on `fleetfuel_test_concurrency` (overlapping PHP processes) and the simulator suite on `fleetfuel_test_integration` (the app over real HTTP); then the JavaScript unit tests (`npm test`, Node's built-in runner) |
 | `make lint` / `make analyse` | Pint style check / Larastan (PHPStan level 6), then PHPStan level 6 for the POS simulator |
 | `make build` | `npm ci` and a production Vite build |
 | `make verify` | lint, analyse, test and build; stops at the first failure |
@@ -54,9 +60,21 @@ Dates are relative to an "as of" clock (default: now). The POS simulator cards `
 - Seeding refuses to run outside the `local`/`testing` environment, without `DEMO_MODE=true`, or without a `DEMO_PASSWORD`.
 - Starting over **deletes all local data**: `docker compose exec app php artisan migrate:fresh --seed`. It is deliberately not part of any `make` target.
 
+## Dashboard, transactions and audit log
+
+- **Dashboard** (admins and managers): this Beirut month's purchases, liters and spend next to last month's; quota warnings (blocked cards and cards out of quota, with the reason); open deliveries; the USD/LBP rate in use and where it came from (fixture, provider or manual override); the latest purchases. A manager sees their own company only.
+- **Transactions** (every role, scoped: every purchase for admins, the own company for managers, the own station for operators): filter by Beirut dates, full card number, station, product and, for admins, company.
+  - The totals cover the whole filter, not just the page, and **Download CSV** exports exactly those rows (admins and managers).
+  - With JavaScript, a filter change reloads only the results and keeps the filters in the address bar, so reload, back/forward and shared links show the same view. An older, slower answer never overwrites a newer one. Without JavaScript the form still works.
+  - While loading, the old results are dimmed; after an error they are replaced by the reason, with **Try again** or **Sign in again**.
+- **Audit log** (admins): who changed what and when, filtered by person, action, record type, company and date. Fields named like credentials are never shown and card numbers are masked.
+- Every page has a "Skip to main content" link, labelled fields whose errors are read out by screen readers, and error pages in plain words (not found, not allowed, session expired, server error).
+
+Demo dates are relative to the moment the database was seeded. Early in a month the dashboard shows last month next to the current one, and the transaction list's dates can be widened.
+
 ## Fleet screens
 
-Sign in as `admin@fleetfuel.test` or `manager.atlas@fleetfuel.test`; the navigation bar shows what each role may open.
+Sign in as `admin@fleetfuel.test` or `manager.atlas@fleetfuel.test`; the sidebar (the **Menu** button on a phone) shows what each role may open.
 
 - **Companies, stations, products** (admin): add, edit and deactivate. Managers and operators see active stations and products only.
 - **Vehicles and drivers** (admin: every company; manager: own company): add, edit and deactivate. The company is chosen by the server (an admin picks it; a manager cannot), and a vehicle's fuel type is fixed once created.

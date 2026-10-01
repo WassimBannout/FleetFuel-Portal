@@ -1,2 +1,154 @@
 /* Bootstrap 5 with its default system font stack; project styles go below. */
 @import 'bootstrap/dist/css/bootstrap.css';
+
+/*
+ * Layout (docs/06-UI-SPEC.md): a dark navy sidebar that stays in place from
+ * the lg breakpoint (992px) and becomes an off-canvas menu below it, with a
+ * light content area. Colours are checked for contrast against the navy:
+ * links ~11:1, section headings ~6.5:1.
+ */
+:root {
+    --ff-navy: #13233f;
+    --ff-navy-hover: #1d3358;
+    --ff-sidebar-width: 15.5rem;
+    --ff-focus: #9ec5fe;
+}
+
+.skip-link:focus {
+    position: fixed;
+    top: .5rem;
+    left: .5rem;
+    z-index: 1080;
+    padding: .5rem 1rem;
+    color: #fff;
+    background: var(--bs-primary);
+    border-radius: var(--bs-border-radius);
+}
+
+.app-topbar {
+    background: var(--ff-navy);
+}
+
+.app-sidebar .offcanvas-lg {
+    --bs-offcanvas-width: var(--ff-sidebar-width);
+    --bs-offcanvas-bg: var(--ff-navy);
+    --bs-offcanvas-color: #fff;
+}
+
+.app-sidebar .brand {
+    color: #fff;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.app-sidebar .nav-section {
+    margin: 1rem 0 .25rem;
+    padding: 0 .75rem;
+    font-size: .75rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, .6);
+}
+
+.app-sidebar .nav-link {
+    padding: .4rem .75rem;
+    color: rgba(255, 255, 255, .82);
+    border-left: 3px solid transparent;
+    border-radius: 0 var(--bs-border-radius) var(--bs-border-radius) 0;
+}
+
+.app-sidebar .nav-link:hover {
+    color: #fff;
+    background: var(--ff-navy-hover);
+}
+
+.app-sidebar .nav-link.active {
+    color: #fff;
+    font-weight: 600;
+    background: rgba(255, 255, 255, .12);
+    border-left-color: var(--ff-focus);
+}
+
+/* Keyboard focus must stay visible on the dark background. */
+.app-sidebar a:focus-visible,
+.app-sidebar button:focus-visible,
+.app-topbar a:focus-visible,
+.app-topbar button:focus-visible {
+    outline: 2px solid var(--ff-focus);
+    outline-offset: 2px;
+    box-shadow: none;
+}
+
+.app-sidebar .account {
+    border-top: 1px solid rgba(255, 255, 255, .15);
+    color: rgba(255, 255, 255, .82);
+}
+
+.app-main {
+    max-width: 1400px;
+}
+
+/* Lets wide tables scroll inside .table-responsive instead of widening the flex layout. */
+.min-w-0 {
+    min-width: 0;
+}
+
+#main:focus {
+    outline: none;
+}
+
+@media (min-width: 992px) {
+    /* Paints the sidebar column for the whole page height; the sidebar itself stays in view while scrolling. */
+    .app-shell {
+        background: linear-gradient(to right, var(--ff-navy) var(--ff-sidebar-width), transparent var(--ff-sidebar-width));
+    }
+
+    .app-sidebar {
+        position: sticky;
+        top: 0;
+        flex-shrink: 0;
+        width: var(--ff-sidebar-width);
+        height: 100vh;
+        overflow-y: auto;
+        background: var(--ff-navy);
+    }
+}
+
+/*
+ * AJAX regions: while a request runs, the old content is dimmed and cannot
+ * be clicked, so stale totals never look current (docs/06-UI-SPEC.md).
+ */
+.is-loading {
+    opacity: .45;
+    pointer-events: none;
+    transition: opacity .15s ease-in;
+}
+
+.stat-card .stat-value {
+    font-size: 1.35rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Screen-reader text in table cells ("Details of purchase 24") is absolutely
+ * positioned by .visually-hidden. Without a positioned ancestor it escapes
+ * the scrolling wrapper and widens the whole page on phones (found in the
+ * M09 mobile check: the dashboard was 782px wide at 390px). Positioning the
+ * wrapper keeps it, and the table, inside the horizontal scroll.
+ */
+.table-responsive {
+    position: relative;
+}
+
+.table td.text-end,
+.table th.text-end {
+    font-variant-numeric: tabular-nums;
+}
+
+/* Audit before/after values: keep long JSON readable without widening the page. */
+.audit-values {
+    min-width: 14rem;
+    word-break: break-word;
+}

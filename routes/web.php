@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Web\AuditLogController;
 use App\Http\Controllers\Web\CompanyController;
 use App\Http\Controllers\Web\DashboardController;
 use App\Http\Controllers\Web\DeliveryOrderController;
@@ -46,6 +47,11 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->middleware('role:station_operator')
         ->name('station.home');
 
+    // The purchase ledger for every role, scoped like the API list: all
+    // purchases for admins, the own company for managers, the own station
+    // for operators. /results is the same listing for page scripts (JSON).
+    Route::get('/transactions', [TransactionController::class, 'index'])->name('transactions.index');
+    Route::get('/transactions/results', [TransactionController::class, 'results'])->name('transactions.results');
     Route::get('/transactions/{transaction}', [TransactionController::class, 'show'])
         ->whereNumber('transaction')
         ->name('transactions.show');
@@ -70,6 +76,9 @@ Route::middleware(['auth', 'active'])->group(function () {
         // scheduled `rates:sync` command, never a page request.
         Route::get('/integrations/exchange-rates', [ExchangeRateController::class, 'index'])->name('integrations.exchange-rates');
         Route::post('/integrations/exchange-rates/overrides', [ExchangeRateController::class, 'store'])->name('integrations.exchange-rates.overrides.store');
+
+        // Read-only audit trail with filters; nothing can edit or delete it.
+        Route::get('/audit', [AuditLogController::class, 'index'])->name('audit.index');
     });
 
     // Fleet: admins for every company, managers for their own.

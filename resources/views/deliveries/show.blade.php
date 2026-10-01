@@ -13,7 +13,8 @@
     {{-- Messages from the status buttons (resources/js/delivery-actions.js). --}}
     <div id="delivery-feedback" aria-live="polite"></div>
 
-    <div id="delivery-panel" data-delivery-panel data-panel-url="{{ route('deliveries.panel', $order) }}" data-feedback="#delivery-feedback">
+    <div id="delivery-panel" data-delivery-panel data-panel-url="{{ route('deliveries.panel', $order) }}" data-feedback="#delivery-feedback"
+         data-login-url="{{ route('login') }}">
         @include('deliveries._panel')
     </div>
 

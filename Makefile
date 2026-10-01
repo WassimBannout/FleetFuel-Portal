@@ -48,10 +48,12 @@ up: ## Start the existing stack without changing data
 down: ## Stop the stack; database volumes are kept
 	$(COMPOSE) --profile mail down --remove-orphans
 
-test: ## Run PHPUnit against the isolated fleetfuel_test MySQL database
+test: ## Run PHPUnit against the isolated fleetfuel_test MySQL database, then the JavaScript unit tests
 	@# The Integration suite runs the standalone POS simulator, so install its locked dependencies.
 	$(PHP) composer install --working-dir=tools/pos-simulator --no-interaction --quiet
 	$(PHP_DB) php artisan test
+	@# Node's built-in test runner; the tested modules import no packages, so no npm install is needed.
+	$(NODE) npm test --silent
 
 lint: ## Check code style with Pint (no changes are written)
 	$(PHP) vendor/bin/pint --test

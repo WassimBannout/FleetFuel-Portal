@@ -4,43 +4,61 @@ Updated: 2026-10-01
 
 ## Current state
 
-- **M08 SQL reports and accounting CSV is DONE and verified locally on MySQL 8.4**, on top of M00–M07.
-  - `app/Repositories/ReportRepository.php`: bound SQL with allowlisted grouping for:
-    - consumption by company, vehicle or product (grouped by ID, from the stored snapshots, never repriced);
-    - top stations;
-    - this month's quota exceptions with reasons;
-    - tank overfills;
-    - rapid fills (`LAG()` with a 30-minute lookback before the range);
-    - a full-to-full efficiency estimate (a bounded lookback of one fill per vehicle);
-    - delivery SLA from the status history.
-
-    `ReportScope` pins a manager to their own company.
-  - API: `GET /api/v1/reports/consumption` and `GET /api/v1/exports/transactions.csv`. `openapi.json` 0.8.0 has no `planned` operation left.
-  - The CSV uses the transaction list's own filters (`TransactionFilters`). It streams in keyset chunks inside one snapshot, quotes cells and neutralizes spreadsheet formulas.
-  - Screens: **Reports** in the navigation bar (six pages under `/reports`, a date and company filter), and the same CSV as a browser download from the consumption page.
-  - New index `fuel_transactions (transacted_at, id)` and the read-only `php artisan reports:explain`, both backed by measured plans in `docs/REPORT-QUERY-PLANS.md`.
-  - Postman folder 04 is enabled and self-contained.
-- Dev database: everything listed for M07, plus the new index (an additive migration, applied with `php artisan migrate`). M08's live checks only read data; their token was revoked and their sessions signed out. Purchases are still 36 and `usage:reconcile` matches.
-- Not built yet: the dashboard finish, the AJAX transaction list and the UI polish (M09).
-- Local URL: <http://localhost:8080> (sign-in `/login`, reports `/reports`, readiness `/health`, liveness `/up`, API base `/api/v1`).
-- Git: branch `main` tracks `origin/main` (github.com/WassimBannout/FleetFuel-Portal).
-  - M07 is `93415df`. GitHub Actions run 36838076726 passed on it: Pint PASS on 284 files, Larastan OK twice, 508 tests / 4937 assertions (106.54 s), npm 0 vulnerabilities, Vite build OK, and the repeated-setup step passed.
-  - M08 is committed and pushed in the commit that contains this file. Its CI result had not been observed when this file was written.
+- **M09 Dashboard and UI finish is DONE**, on top of M00–M08. It was verified locally on MySQL 8.4 and in a real Chrome browser.
+  - **Layout:**
+    - a navy sidebar that becomes a Menu button and off-canvas panel below 992 px;
+    - role-based link groups, a "Skip to main content" link and visible keyboard focus;
+    - plain-language error pages (403, 404, 419, 429, 5xx) that work without the database.
+  - **Dashboard:**
+    - this Beirut month next to last month;
+    - quota warnings with reasons;
+    - open deliveries;
+    - the USD/LBP rate in use, with its source.
+  - **Transactions (`/transactions`)**, for every role, scoped like the API:
+    - filters, and totals for the whole filter;
+    - a CSV link of exactly those rows;
+    - jQuery reloads of the results only, with the newest answer always winning and the filters kept in the address bar;
+    - loading, empty and error states that never leave stale totals on screen.
+  - **Audit log (`/audit`)**, for admins: filters by person, action, record type, company and date, with credential-like fields redacted and card numbers masked.
+  - **Other changes:**
+    - rate-source badges on the list, the purchase page and the dashboard;
+    - page scripts of a disabled user get 401;
+    - a phone-layout bug, present since M03, fixed;
+    - the JavaScript unit tests (`npm test`) now run in `make test`;
+    - real screenshots in `docs/screenshots/`.
+- **Dev database:** M09 changed no data in it. The live checks only signed in, read pages and signed out (36 purchases, as before).
+  - Two failed admin sign-ins were logged on dev, from my misconfigured throwaway server (explained in the session log). The guest sessions and sign-in throttle entries they left expire on their own.
+  - Restart `app` and `web` after pulling (`docker compose restart app web`). Docker Desktop's file sharing can keep serving an old copy of a file that was replaced, rather than edited in place, while a container runs (see the session log).
+- **Local URLs:** <http://localhost:8080> (sign-in `/login`, dashboard `/dashboard`, transactions `/transactions`, audit `/audit`, reports `/reports`, readiness `/health`, liveness `/up`, API base `/api/v1`).
+- **Git:** branch `main` tracks `origin/main` (github.com/WassimBannout/FleetFuel-Portal).
+  - M08 is `12021fe`. GitHub Actions run 36845821888 passed on it:
+    - Pint PASS on 305 files and Larastan OK twice;
+    - 544 tests / 5312 assertions (125.53 s);
+    - npm 0 vulnerabilities and a Vite build OK;
+    - the repeated-setup step passed.
+  - M09 is committed and pushed in the commit that contains this file. Its CI result had not been observed when this file was written.
 
 ## Next action
 
-Execute `prompts/09-ui-polish.md` (M09):
-- the role-scoped dashboard;
-- the AJAX transaction list with filters and totals, protected against stale responses;
-- responsive navigation, accessible forms, loading, empty and error states;
-- real screenshots and the five-minute walkthrough (T34).
+Execute `prompts/10-release-quality.md` (M10):
+- audit every implemented acceptance case and run the CI-equivalent checks;
+- rehearse a clean checkout with isolated Compose volumes and ports;
+- check that routes, contracts and documented commands agree;
+- record one real troubleshooting story.
 
-Starting points from M08:
+Starting points from M09:
 
-- **Transaction list:** the web screen does not exist yet. Build it on `App\Support\TransactionFilters` and the `FiltersTransactions` request trait, as the API list and both CSV routes do. Then its totals, the API totals and the CSV (`/exports/transactions.csv` with the same query string) cover the same rows by construction (T34 "totals agree with export").
-- **Dashboard quota warnings:** `ReportRepository::quotaExceptions($companyId, BusinessMonth::for(now()))` already gives the cards and the reasons.
-- **Reports in the UI pass:** the six pages are plain server-rendered tables with a GET filter form, with no JavaScript yet. Their headings and filters are the place to check keyboard order and mobile width.
-- **Measuring:** `php artisan reports:explain --analyze` shows real plans if a new query is added. Re-measure neighboring queries after adding an index (docs/REPORT-QUERY-PLANS.md, "A regression found while measuring").
+- **Debugging stories with real evidence:**
+  - the phone overflow (screen-reader text escaping the scrolling table, found by measuring in Chrome);
+  - `php artisan serve` dropping environment overrides (its workers re-read `.env`);
+  - Docker Desktop serving a stale copy of a file replaced by rename (the inode check).
+
+  The phone fix is CSS and has no automated regression test yet. A browser-level check would be the M10 way to keep it fixed.
+- **The audit log now shows the M06 audit-name mismatch:** "Fuel card limits changed" (seed: `fuel_card.limits_changed`) and "Card limits changed" (service: `card.limits_changed`) appear as two actions in its filter. Decide and fix in M10.
+- **Carried over:**
+  - the 503 `temporarily_unavailable` path;
+  - the simulator with a host PHP outside Docker;
+  - SQL Server (S01).
 
 ## Milestone ledger
 
@@ -55,14 +73,209 @@ Starting points from M08:
 | M06 API/tooling | DONE | T24 on MySQL: `openapi.json` valid against the official OpenAPI 3.1 schema (a broken copy fails with exactly the injected errors); routes, abilities and roles match it and planned operations are unrouted; every response in the API tests is validated against the documented status, headers and schema, including 400/401/403/404/409/422/429 (with `Retry-After`)/503. T25: the simulator's five scenarios over real HTTP on fresh cards (Integration suite, and live through nginx: ledger +1); Postman folders 01/02/05 with Newman 6: 26 requests, 51 assertions, 0 failures (ledger +1). `make verify`: 481 tests, 4242 assertions |
 | M07 Deliveries | DONE | T26–T28 on MySQL. Creation writes the initial history. Each accepted change writes exactly one history row and one audit row, and both roll back with the order when either write is forced to fail. Skipped, repeated, stale and final-status changes and manager escalation are refused with nothing written. Token abilities are checked per role; another company's order is 404. T28: separate PHP processes through the real HTTP kernel; two admins, or an admin and a manager, from the same expected status give one 200 and one 409 `stale_state`; the commit and rollback orderings are covered too. Live: Postman folder 03 with Newman (19 requests, 38 assertions, 0 failures) and the real jQuery module in jsdom through nginx (12/12). `make verify`: 508 tests, 4937 assertions |
 | M08 Reporting | DONE | T29–T33 on MySQL against the demo seed. Consumption totals per company ID worked out by hand (515.00 L / 41,675,000.00 LBP and 325.00 L / 26,775,000.00 LBP; USD equal to the stored per-purchase sum). Equal names never merge; vehicle grouping follows the purchase snapshot; new prices and rates change nothing. Quota exceptions: a reduced limit, a limit reached exactly, blocked and archived cards; a declined POS purchase adds nothing. Rapid fills: exactly 30 min not flagged, 29:59 flagged, same-second fills by ID, the predecessor read from before the range start, card-only purchases never flagged. Efficiency from recorded readings only. SLA from the history rows. Top stations ties by ID. CSV: tenant and date scope, every row across chunks, the same totals as the ledger list, RFC 4180 quoting and formula neutralization, identical to the browser download. Cross-tenant checks on every report and the export. 11 deliberate breakages all caught. Query plans on 64,032 purchases led to one new index. `make verify`: 544 tests, 5312 assertions |
-| M09 UI polish | TODO | Depends on M08 |
+| M09 UI polish | DONE | T34 on MySQL and in Chrome. Latest response wins: unit tests with controlled promises, and in the real page with a delayed first answer (a broken build shows the stale result, the real one does not). Totals agree with the CSV for the whole filter, across pages and roles. Loading, empty, error, offline, expired-session and validation states. Keyboard sign-in, skip link, menu and paging. No horizontal page overflow at 390 px on 32 pages. The five-minute walkthrough for all three roles, with the POS simulator. Fixed query counts for the list, dashboard and audit log. 13 deliberate breakages all caught. `make verify`: 580 tests, 5716 assertions (plus 14 JavaScript tests) |
 | M10 Release quality | TODO | Depends on M09 |
 | M11 Shipping/portfolio | TODO | Depends on M10; live deployment may need user account |
 | S01 SQL Server | OPTIONAL | Begin only after user requests the stretch |
 
 Use TODO / IN PROGRESS / DONE / BLOCKED. A milestone is DONE only when its checks pass. If an external prerequisite blocks one part, record exactly which part and finish independent local work.
 
-## Most recent session: M08
+## Most recent session: M09
+
+**Date / milestone:** 2026-10-01, M09 dashboard and UI finish.
+
+**Goal and actual state:**
+- Goal (prompts/09-ui-polish.md):
+  - the role-scoped dashboard and responsive Bootstrap navigation;
+  - AJAX filters and totals protected against stale responses;
+  - accessible forms, and clear loading, empty and error states;
+  - escaped dynamic text, CSRF on browser writes, and real screenshots.
+
+  Run the five-minute walkthrough for every role, check mobile, keyboard, expired-session and error flows (T34), and explain the query-count and filtering decisions.
+- Result: done. All local gates pass on MySQL, and the screens were checked in a real Chrome browser.
+- M08 had nothing outstanding: the tree was clean, `main` matched `origin/main` at `12021fe`, and GitHub CI run 36845821888 had passed on it (observed at the end of the M08 session).
+- Scope note: the UI spec's audit screen was deferred in M03 as "later UI work". It is built here because M09 is the last UI milestone and F10 needs it (recorded in DECISIONS).
+
+### What was built
+
+- **Layout:**
+  - `resources/views/layouts/app.blade.php`: a navy sidebar, an off-canvas menu below 992 px, grouped role-based links and a skip link;
+  - new `layouts/_flash` and `layouts/_footer`;
+  - `resources/css/app.css`: tokens, focus outlines, the loading dimmer and the `.table-responsive` fix.
+- **Dashboard:**
+  - `Web\DashboardController`: two months in one grouped query, quota warnings through `ReportRepository::quotaExceptions`, open deliveries, and the rate in use through `PriceResolver::findRate`;
+  - the `dashboard` view.
+- **Transactions:**
+  - `Web\TransactionController@index` and `@results` (JSON `{html, summary, url, from, to}`);
+  - `Requests\Transactions\ListTransactionsRequest` (the `FiltersTransactions` rules, `filterQuery()`);
+  - views `transactions/{index, _results}`;
+  - `_table` gained an optional rate-source column;
+  - `partials/rate-source-badge`;
+  - routes `transactions.index` and `transactions.results`.
+- **Audit log:**
+  - `Web\AuditLogController`, `Requests\Audit\ListAuditLogsRequest`, `App\Support\AuditDisplay`;
+  - the `audit/index` view and the `audit.index` route (admins).
+- **JavaScript:**
+  - `resources/js/transaction-filters.js`;
+  - `resources/js/lib/latest-only.js` and `lib/ajax-failure.js` (no imports, unit-tested);
+  - `delivery-actions.js` now uses `describeFailure()`, which adds the 401 case and a sign-in link;
+  - `app.js` imports the new module.
+- **Errors and sessions:**
+  - `resources/views/errors/{layout, 403, 404, 419, 4xx, 429, 5xx, 500, 503}`;
+  - `EnsureUserIsActive` returns 401 to page scripts.
+- **Accessibility:** `aria-invalid` in the form components and on the sign-in form.
+- **Text updates:**
+  - the home page text (no longer "added in later milestones");
+  - a link from the station page to its full list;
+  - the purchase page's rate-source badge.
+- **Tooling:**
+  - `package.json` `npm test` (Node's built-in runner, no new package);
+  - `make test` runs it after PHPUnit.
+- **Tests (36 new PHP tests and 14 JavaScript tests; 3 PHP tests changed):**
+  - `tests/Feature/Transactions/TransactionScreensTest` (7);
+  - `tests/Feature/Dashboard/DashboardTest` (6);
+  - `tests/Feature/Audit/AuditScreenTest` (5);
+  - `tests/Feature/UiShellTest` (4);
+  - `tests/Unit/Support/AuditDisplayTest` (13 cases);
+  - one new `WebLoginTest` case;
+  - `resources/js/tests/{latest-only, ajax-failure}.test.js` (6 + 8).
+
+  Helpers: `tests/Concerns/CountsQueries`, and `BuildsLedgerFixtures::addCardOnlyPurchases()`. Changed: `TenantIsolationTest` (the dashboard's view data is renamed) and `CsrfProtectionTest` (the 419 page's content).
+- **Docs:**
+  - `docs/screenshots/` (9 WebP files and a README);
+  - README (status, screenshots, "Dashboard, transactions and audit log", `make test`);
+  - `docs/02-ARCHITECTURE.md` (`make test`);
+  - `docs/DECISIONS.md` (M09 record), CHANGELOG, this file.
+
+### Checks: exact command and actual outcome
+
+PHP commands ran as `docker compose run --rm app …` against the isolated MySQL test databases, unless stated otherwise.
+
+| Command | Outcome |
+| --- | --- |
+| `git status`, `git log`, `git branch -vv` at the start | Clean tree; `main` at `12021fe` = `origin/main` |
+| `node --test "resources/js/tests/*.test.js"` (node container) | 13 passed on the first run |
+| Pint and Larastan after the PHP code | Pint PASS on 309 files; Larastan `[OK] No errors` |
+| Existing screen, auth, report, delivery, fleet and price tests after the new layout | **2 failed, 154 passed**: `TenantIsolationTest` read the dashboard's old `monthTotals` view variable, renamed to `current`/`previous`. Updated, then 9 passed / 109 assertions |
+| `TransactionScreensTest` + `WebLoginTest` | 20 passed / 239 assertions on the first run |
+| `DashboardTest` + `TransactionScreensTest` | 13 passed / 187 assertions on the first run |
+| `AuditScreenTest`, `UiShellTest`, `AuditDisplayTest`, `CsrfProtectionTest` | **1 failed, 28 passed**: the 500 page was Laravel's own. Laravel ships 429, 500 and 503 views, which win over a `5xx`/`4xx` fallback, so `errors/{429,500,503}` now extend ours. Then 4 passed / 102 assertions |
+| Throwaway copy for the browser checks: database `fleetfuel_test_screens` (test user), `migrate`, `demo:seed` with a one-off demo password | 32 purchases, 15 in October. Two setup mistakes on the way: (1) `php artisan serve` passes only a few environment variables to its PHP workers, which re-read `.env`, so the copy was really serving the **dev** database. My two sign-ins with the one-off password failed there (logged on dev as failed sign-ins; no data changed). (2) `php -S` with Laravel's router script must run from `public/`. Restarted correctly; the copy then answered from its own database |
+| Real Chrome (DevTools protocol), desktop 1366 × 900 and phone 390 × 844 | See "Browser checks" below |
+| `make simulate SCENARIO=all` against the throwaway copy (`POS_BASE_URL=http://ffshots:8000/api/v1`, Harbor operator, password in the environment) | **5 scenarios, 16 checks passed**. One 20.00 L purchase (id 33, 1600000.00 LBP / 17.88 USD); identical and equivalent replays returned it; conflict 409; blocked 403; quota 403. Ledger 32 → 33 |
+| Docker Desktop file sharing | The throwaway server kept serving an old `dashboard.blade.php`. The host file was inode 20500298 after `sed -i`; the running container still saw 20500297. Restarting the container fixed it, and I repeated the checks that depended on those files. Files edited in place were seen at once. The dev `app` and `web` containers were restarted for the same reason |
+| Negative checks J1, J2, P1–P10, P1b (file mutated, tests run, file restored in place and checksum-verified) | All 13 caught; see the list below this table |
+| `docker compose restart app web`, then a one-off Node smoke script through nginx (password from `.env` in an environment variable, never printed) | **First run: 20 passed, 3 failed**, all my own check: I assumed sign-out redirects to `/`, but `config/fortify.php` sends it to `/login`. The check now also requires that the old cookie no longer opens `/transactions`. Then **23/23**: the guest is redirected or gets 401; admin, manager and operator open their pages (`/audit` 403 for the others); results JSON 200; no Cedar rows for the manager; sign-out ends each session |
+| `make verify` #1 | exit 0: Pint PASS on 315 files, Larastan `[OK] No errors`, simulator PHPStan `[OK] No errors`, **580 tests / 5716 assertions** (184.93 s), `npm test` 14 passed, npm 0 vulnerabilities, Vite build OK |
+| Change after review: business refusals with a `code` (such as `company_inactive`, 403) show their own message on the delivery buttons again; framework 403 texts are still hidden | `npm test`: 14 passed (one new case). It was already included in `make verify` #1, whose `npm test` step ran after the edit |
+| `make verify` #2, the committed tree | exit 0: Pint PASS on 315 files, Larastan `[OK] No errors`, simulator PHPStan `[OK] No errors`, **580 tests / 5716 assertions** (176.56 s), `npm test` 14 passed, npm 0 vulnerabilities, Vite build OK |
+| `sh docker/bin/check-setup-preserves-state.sh` | PASS: repeated setup kept APP_KEY, credentials and database rows (and restarted the stack, so every container reads the current files) |
+
+Negative checks:
+- **J1**, the latest-only sequence check removed: 2 JavaScript tests failed. In Chrome with that build, the delayed older answer replaced the newer filter: Unleaded 95 rows and address while "Unleaded 98" was selected. With the real build the same script shows Unleaded 98.
+- **J2**, server error bodies shown to the user: the "never shown" test failed (`SQLSTATE…` would have appeared).
+- **P1**, eager loading removed from the list: 6 tests failed. Laravel's strict mode refuses lazy loading outside production, so the pages returned 500.
+- **P1b**, the same with strict mode off, as in production: only the query-count test failed, with **102 queries instead of 6**.
+- **P2**, the pager running its own `COUNT`: the query-count test failed (7, not 6).
+- **P3**, totals of the first page only: the totals/CSV test failed (25 rows in the totals, 32 in the CSV).
+- **P4**, the list not tenant-scoped: 2 tests failed (scope and tampered filters).
+- **P5**, the CSV link without explicit dates: the totals/CSV test failed (the CSV fell back to the current month: 15 rows, not 32).
+- **P6**, the dashboard's open deliveries without the eager-loaded company: 3 tests failed (lazy loading refused).
+- **P7**, quota warnings not scoped to the manager: the other-manager test failed.
+- **P8**, audit redaction disabled: 5 tests failed (the screen and 4 unit cases).
+- **P9**, the audit entity allowlist removed: the fixed-list test failed (200, not a redirect with an error). The value is bound either way, so no SQL could be injected; the allowlist is what turns it into a clear error.
+- **P10**, the disabled-user JSON branch removed: the new `WebLoginTest` case failed (302, not 401).
+
+### Browser checks (real Chrome through the DevTools protocol, on the throwaway copy)
+
+- **Keyboard sign-in:** the email field has focus; Tab goes to the password, Enter submits.
+  - A wrong password shows the generic error, linked with `aria-describedby` and `aria-invalid`; the email is kept and focus returns to it.
+  - The correct password goes to the dashboard (admin) or the station page (operator).
+- **AJAX list, admin:**
+  - Choosing Diesel reloaded only the results: a marker set on `window` survived, so there was no page reload.
+  - The address became `?from=2026-10-01&to=2026-11-01&product_code=DIESEL` and the live region read "Showing 1–10 of 10 purchases."
+  - The CSV of that filter, fetched from the page, had 10 rows and exactly the page totals: 635.00 L, 50,800,000.00 LBP, 567.24 USD.
+- **Latest response wins (T34):** `$.ajax` was wrapped so the first answer arrived 1.5 s late, and its `abort()` did nothing, as if the answer were already on its way. Choosing Unleaded 95 and then Unleaded 98: the late answer arrived and was ignored, and the page, address and totals stayed on Unleaded 98 (2 purchases, 75.00 L). Repeated after the container restart with a card filter: the newest, empty result stayed. J1 above shows the same script catching the bug.
+- **Offline:**
+  - With the network emulated offline, a filter change showed "No answer from the server. Check your connection and try again." as an assertive alert with **Try again**; the old totals and rows were removed and the address was unchanged.
+  - Back online, Try again (keyboard) restored the results and the address.
+- **Validation:** a "before" date earlier than "from" put the message under the field (`aria-invalid`, `aria-describedby`), cleared the totals, and everything reset once the date was fixed.
+- **History and paging:**
+  - Back restored the earlier filter and results without a reload.
+  - Page 2 by keyboard showed "Showing 26–32 of 32 purchases.", kept the totals at 32 and moved focus to the results.
+  - A filter change from page 2 went back to page 1, and a full reload of a filtered address showed the same view.
+- **Expired session:**
+  - Signed out in a second tab: in the first tab, a filter change showed "Your session has expired. Sign in again to continue." with a **Sign in again** link, and no stale totals.
+  - The delivery buttons showed the same message, re-enabled the button, and left order 5 pending.
+  - An old sign-out form posted from a signed-out tab was **not** a 419: Laravel 13 accepts the browser's `Sec-Fetch-Site: same-origin`. The `auth` middleware sent the user to sign in, and after signing in they returned to the transaction list.
+  - The 419 page itself is covered by `CsrfProtectionTest` with the real middleware.
+- **Phone (390 × 844):**
+  - 18 manager pages, 9 admin pages (audit, companies, rates, prices, forms) and 5 operator pages: no horizontal page overflow; wide tables scroll inside their wrapper.
+  - The first sweep found 5 pages at up to 782 px: absolutely positioned screen-reader text in table cells escaped `.table-responsive`. Confirmed in place, fixed in CSS, and the sweep repeated.
+- **Menu and skip link on a phone:**
+  - Tab shows "Skip to main content" at the top; Enter, then Tab, lands on the first link in the main content.
+  - Tab reaches **Menu**, with the visible focus outline; Enter opens the panel as a modal dialog with focus inside; Escape closes it and returns focus to Menu.
+- **Not found:** Cedar's card, purchase, delivery and vehicle opened by the Atlas manager returned the same "Page not found" page, with no Cedar text. Admin pages were 403 for the manager and the operator.
+
+### Five-minute walkthrough (UI spec), all roles, on the throwaway copy
+
+1. The admin dashboard shows every company (16 purchases this month, 860.00 L at the time of the screenshot; quota warnings; 3 open deliveries; the fixture rate with its source). The manager's shows Atlas only. Cedar records are 404 by URL, and `?company_id=` on reports is ignored.
+2. The manager's card `FF-ATLAS-001` page: 0.00 of 100.00 L. After the simulator's purchase and replays: 20.00 L used, 80.00 L left, one purchase listed.
+3. Blocked, conflict and over-quota requests were refused with nothing charged; the ledger grew by exactly one row (32 → 33).
+4. The manager requested order 7 through the form (keyboard submit).
+   - The admin scheduled it through the in-place panel; the button was disabled while the request ran, and the panel reloaded.
+   - The manager's stale tab tried to cancel and was refused with "This order changed in the meantime…"; its panel refreshed with no cancel form.
+   - The admin dispatched and delivered it, and the manager saw the four-step timeline.
+5. The manager filtered transactions by a lowercase card number (normalized) and by date. The CSV matched the totals (all Atlas: 20 rows, 1,140.00 L, 91,140,000.00 LBP, 1,017.85 USD).
+   - The admin's anomalies page shows the 75 L fill on a 60 L tank and the 20-minute refill.
+   - Purchase 28 shows its "Manual override" source at 89,700.00000000 LBP per USD.
+- **Operator:** sees only Station, Transactions, Stations and Products. The list shows 17 Harbor purchases, with no station filter and no CSV. The dashboard, reports, CSV, cards and audit are 403, and North purchases are 404.
+
+The throwaway server was stopped afterwards, `fleetfuel_test_screens` dropped, the one-off password file deleted and the browser tabs closed.
+
+### Not run or not verified
+
+- GitHub CI for the M09 commit (reported in the session reply after the push).
+- A real screen reader (NVDA, VoiceOver): I checked the accessibility tree, focus order and ARIA attributes, not spoken output.
+- Real phone hardware and browsers other than Chrome (Firefox, Safari). The phone checks used Chrome's device emulation.
+- An automated accessibility audit (axe, Lighthouse). The sidebar colours' contrast was computed by formula, not measured with a tool.
+- The phone-overflow fix has no automated regression test (CSS). It was verified in the browser only.
+- The screenshots come from the throwaway copy, not the dev database.
+- Carried over: the 503 `temporarily_unavailable` path, the simulator with a host PHP outside Docker, SQL Server (S01).
+
+### Decisions and deviations
+
+All are in `docs/DECISIONS.md` (2026-10-01, M09):
+
+- the layout and navigation;
+- the audit screen brought into M09;
+- the transaction list's shared rules and redirect;
+- one aggregate for the totals and the count;
+- the AJAX design (server-rendered fragment in JSON, latest response wins, the address as state, error states);
+- the web AJAX error shapes and the disabled-user 401;
+- the error pages and the `Sec-Fetch-Site` observation;
+- the dashboard contents;
+- the rate badges;
+- the phone fix;
+- Node's built-in test runner;
+- the screenshots.
+
+No product rule and no API changed.
+
+### Remaining work and blockers
+
+None for M09.
+- Carried over: the seed's `fuel_card.limits_changed` versus the service's `card.limits_changed` audit names, now visible as two actions in the audit filter (for M10).
+- Possible M10 work: a browser-level regression check for the phone overflow.
+
+**Suggested commit message:** `feat: finish the dashboard and responsive AJAX workflows`.
+
+**One concept to explain:** a filtered list has one source of truth, the server, and only its newest answer may reach the screen.
+- **Filtering happens once, on the server.** The page, the AJAX results, the API list and the CSV all apply the same `TransactionFilters` to the same tenant-scoped query. The browser only sends the form's values and shows what comes back; it never filters or adds up rows itself. That is why the totals and the CSV agree by construction, and why a manager cannot widen their view by editing the address.
+- **Only the newest answer counts.** Requests can finish out of order: a slow answer to an old filter may arrive after the answer to the new one. Each request gets a sequence number. The previous request is aborted when possible, and any answer that is not the newest is ignored, because aborting alone cannot stop an answer already on its way.
+- **The number of queries must not grow with the rows (N+1).** Loading each purchase's company, station, product and card one row at a time costs four queries per row: 102 queries for one page in P1b. Eager loading (`->with([...])`) fetches each relation once per page; one aggregate gives both the totals and the row count. The list runs 6 queries whether it shows 1 row or 25. Laravel's strict mode turns any accidental lazy load into an error outside production, and a test counts the queries so production-like code cannot regress.
+
+## Earlier session: M08
 
 **Date / milestone:** 2026-10-01, M08 SQL reports and accounting CSV.
 
@@ -159,7 +372,7 @@ Negative checks:
 
 ### Not run or not verified
 
-- GitHub CI for the M08 commit (reported in the session reply after the push).
+- GitHub CI for the M08 commit was not observed when this log was written. It was checked after the push: run 36845821888 passed (544 tests / 5312 assertions).
 - A real browser: the report pages ran in feature tests and through nginx with a script, not in a browser. Visual, keyboard and mobile checks are M09.
 - The Postman desktop app: folder 04 ran with Newman 6.
 - Query plans at a scale beyond the demo's shape: 64,032 purchases but still 2 companies, 10 cards and 16 history rows.

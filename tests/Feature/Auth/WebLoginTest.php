@@ -177,6 +177,24 @@ class WebLoginTest extends TestCase
         $this->assertGuest();
     }
 
+    /** A page script cannot read a redirect to the sign-in page, so it gets 401 with the reason. */
+    public function test_a_page_script_of_an_account_disabled_after_sign_in_gets_401(): void
+    {
+        $manager = User::factory()->create();
+        $this->signInLikeABrowser($manager);
+
+        $this->startNewRequestCycle();
+        $this->getJson('/transactions/results')->assertOk();
+
+        app(UserAccountService::class)->deactivate(User::query()->findOrFail($manager->id));
+
+        $this->startNewRequestCycle();
+        $this->getJson('/transactions/results')
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'Your account has been disabled. Contact an administrator.']);
+        $this->assertGuest();
+    }
+
     public function test_a_signed_in_user_opening_the_login_page_goes_to_their_own_page(): void
     {
         $operator = User::factory()->stationOperator()->create();

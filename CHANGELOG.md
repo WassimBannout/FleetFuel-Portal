@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- M09 dashboard and UI finish:
+  - Layout: a navy sidebar that becomes a Menu button and off-canvas panel on phones, role-based links, a "Skip to main content" link, visible keyboard focus, and plain-language error pages (403, 404, 419, 429, 5xx).
+  - Dashboard: this month next to last month, quota warnings with reasons, open deliveries, and the USD/LBP rate in use with its source.
+  - Transactions screen for every role, scoped like the API: filters, totals for the whole filter and a CSV link of exactly those rows. jQuery reloads only the results; the newest answer always wins, the filters stay in the address bar, and loading, empty and error states never leave stale totals on screen.
+  - Audit log for admins, with filters, redacted values and masked card numbers.
+  - Rate source badges on the purchase list, purchase page and dashboard.
+  - A disabled user's page script gets 401 instead of the sign-in page.
+  - Fixed: screen-reader text in tables widened pages on phones.
+  - Tests: screens, scope and query counts for the dashboard, transactions and audit log; JavaScript unit tests (`npm test`, run by `make test`); real-browser checks and screenshots in `docs/screenshots`.
 - M08 SQL reports and accounting CSV:
   - `ReportRepository` builds every report with bound SQL and allowlisted grouping:
     - consumption by company, vehicle or product (grouped by ID, from the stored snapshots, never repriced);

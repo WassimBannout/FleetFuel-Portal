@@ -35,7 +35,10 @@ class CsrfProtectionTest extends TestCase
     {
         $user = User::factory()->create();
 
-        $this->post('/login', ['email' => $user->email, 'password' => 'password'])->assertStatus(419);
+        // The 419 page explains what happened and offers to sign in again (M09 error pages).
+        $this->post('/login', ['email' => $user->email, 'password' => 'password'])->assertStatus(419)
+            ->assertSee('Your session expired')->assertSee('Nothing was saved.')
+            ->assertSee('href="'.route('login').'"', false);
         $this->assertGuest();
     }
 

@@ -1,4 +1,5 @@
 import $ from 'jquery';
+import { describeFailure } from './lib/ajax-failure';
 
 // Delivery status buttons (resources/views/deliveries/_panel.blade.php).
 //
@@ -12,7 +13,9 @@ import $ from 'jquery';
 // - 409 (stale_state, invalid_transition): show why and reload the panel,
 //   because the order changed in the meantime;
 // - 422: show the field errors next to the fields and keep the form;
-// - anything else: show the message and re-enable the form.
+// - 401/419 (signed out, session expired): say so, with a sign-in link;
+// - anything else (offline, server error): a generic message from
+//   describeFailure(), and the form is re-enabled to try again.
 //
 // Messages are inserted with .text(), never as HTML. The reloaded panel is
 // HTML rendered (and escaped) by Blade on the server.
@@ -108,10 +111,14 @@ $(document).on('submit', 'form[data-delivery-action]', function (event) {
                 return;
             }
 
-            if (xhr.status === 419) {
-                showFeedback($panel, 'danger', 'Your session has expired. Reload the page and sign in again.');
+            const failure = describeFailure(xhr);
+
+            if (failure.kind === 'session') {
+                showFeedback($panel, 'danger', failure.message);
+                $($panel.data('feedback')).find('.alert')
+                    .append(' ', $('<a class="alert-link"></a>').attr('href', $panel.data('login-url')).text('Sign in again'));
             } else {
-                showFeedback($panel, 'danger', body.message || 'The change could not be saved. Check your connection and try again.');
+                showFeedback($panel, 'danger', `The change was not saved. ${failure.message}`);
             }
 
             restore();

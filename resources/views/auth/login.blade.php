@@ -16,7 +16,7 @@
                             <label for="email" class="form-label">Email</label>
                             <input id="email" name="email" type="email" value="{{ old('email') }}"
                                    @class(['form-control', 'is-invalid' => $errors->has('email')])
-                                   @error('email') aria-describedby="email-error" @enderror
+                                   @error('email') aria-describedby="email-error" aria-invalid="true" @enderror
                                    autocomplete="username" required autofocus>
                             @error('email')
                                 <div id="email-error" class="invalid-feedback">{{ $message }}</div>
@@ -27,7 +27,7 @@
                             <label for="password" class="form-label">Password</label>
                             <input id="password" name="password" type="password"
                                    @class(['form-control', 'is-invalid' => $errors->has('password')])
-                                   @error('password') aria-describedby="password-error" @enderror
+                                   @error('password') aria-describedby="password-error" aria-invalid="true" @enderror
                                    autocomplete="current-password" required>
                             @error('password')
                                 <div id="password-error" class="invalid-feedback">{{ $message }}</div>

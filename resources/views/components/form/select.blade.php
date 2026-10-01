@@ -10,7 +10,8 @@
     <select id="{{ $id }}" name="{{ $name }}"
             {{ $attributes->except('id')->class(['form-select', 'is-invalid' => $hasError]) }}
             @required($required)
-            @if ($describedBy !== '') aria-describedby="{{ $describedBy }}" @endif>
+            @if ($describedBy !== '') aria-describedby="{{ $describedBy }}" @endif
+            @if ($hasError) aria-invalid="true" @endif>
         @if ($placeholder !== null)
             <option value="">{{ $placeholder }}</option>
         @endif

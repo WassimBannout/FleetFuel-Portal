@@ -14,7 +14,10 @@
         </div>
     @endunless
 
-    <h2 class="h5">Latest purchases at this station</h2>
+    <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2">
+        <h2 class="h5">Latest purchases at this station</h2>
+        <a class="small" href="{{ route('transactions.index') }}">All purchases, with filters and totals</a>
+    </div>
     @include('transactions._table', [
         'transactions' => $purchases,
         'showCompany' => true,

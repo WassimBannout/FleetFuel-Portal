@@ -13,6 +13,7 @@ use App\Models\Station;
 use App\Models\User;
 use App\Models\Vehicle;
 use Carbon\CarbonImmutable;
+use Database\Seeders\Support\LedgerFixtureBuilder;
 
 /**
  * Small, valid fixtures for database tests, plus the full demo seed.
@@ -81,5 +82,27 @@ trait BuildsLedgerFixtures
         ]);
 
         $this->artisan('demo:seed', ['--as-of' => $asOf])->assertSuccessful();
+    }
+
+    /**
+     * After seedDemo(): more purchases on the unlimited, vehicle-less
+     * FF-CEDAR-FLEX card at Harbor, through the real ledger service, from
+     * 2026-09-27 06:01 UTC one minute apart. Used to show that a page's
+     * number of queries does not grow with its rows.
+     */
+    protected function addCardOnlyPurchases(int $count, string $refPrefix = 'QC'): void
+    {
+        $builder = app(LedgerFixtureBuilder::class);
+        $card = FuelCard::query()->where('card_no', 'FF-CEDAR-FLEX')->firstOrFail();
+        $station = Station::query()->where('name', 'Harbor Demo Station')->firstOrFail();
+        $operator = User::query()->where('email', 'operator.beirut@fleetfuel.test')->firstOrFail();
+        $diesel = Product::query()->where('code', ProductCode::Diesel->value)->firstOrFail();
+
+        for ($i = 1; $i <= $count; $i++) {
+            $builder->recordPurchase(
+                $card, $station, $operator, $diesel, '5.00',
+                CarbonImmutable::parse('2026-09-27T06:00:00Z')->addMinutes($i), "{$refPrefix}-{$i}",
+            );
+        }
     }
 }

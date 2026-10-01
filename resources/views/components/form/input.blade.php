@@ -9,7 +9,8 @@
     <input id="{{ $id }}" name="{{ $name }}" type="{{ $type }}" value="{{ old($name, $value) }}"
            {{ $attributes->except('id')->class(['form-control', 'is-invalid' => $hasError]) }}
            @required($required)
-           @if ($describedBy !== '') aria-describedby="{{ $describedBy }}" @endif>
+           @if ($describedBy !== '') aria-describedby="{{ $describedBy }}" @endif
+           @if ($hasError) aria-invalid="true" @endif>
     @if ($help)
         <div id="{{ $id }}-help" class="form-text">{{ $help }}</div>
     @endif

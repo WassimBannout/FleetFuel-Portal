@@ -46,9 +46,9 @@ class TenantIsolationTest extends TestCase
         }
 
         $ownThisMonth = FuelTransaction::query()->where('company_id', $atlas->id)->where('quota_month', self::MONTH);
-        $totals = $response->viewData('monthTotals');
-        $this->assertSame($ownThisMonth->count(), (int) $totals->purchases);
-        $this->assertSame((string) $ownThisMonth->sum('liters'), (string) $totals->liters);
+        $totals = $response->viewData('current');
+        $this->assertSame($ownThisMonth->count(), $totals['purchases']);
+        $this->assertSame((string) $ownThisMonth->sum('liters'), $totals['liters']);
         $this->assertSame(
             Vehicle::query()->where('company_id', $atlas->id)->where('is_active', true)->count(),
             $response->viewData('vehicles'),
@@ -67,7 +67,7 @@ class TenantIsolationTest extends TestCase
         $this->assertSame(2, $response->viewData('companies'));
         $this->assertSame(
             FuelTransaction::query()->where('quota_month', self::MONTH)->count(),
-            (int) $response->viewData('monthTotals')->purchases,
+            $response->viewData('current')['purchases'],
         );
     }
 

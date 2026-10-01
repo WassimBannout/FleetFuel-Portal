@@ -8,8 +8,9 @@
             reported in USD and LBP.
         </p>
         <p class="text-body-secondary">
-            Sign-in, roles and company isolation are in place. Fleet management,
-            POS ingestion and reports are added in later milestones.
+            Fleet managers run vehicles, drivers and fuel cards with monthly quotas; stations send
+            purchases through an API; distributor staff schedule diesel deliveries and read
+            consumption reports. Every company, person and price here is fictional.
             Service readiness: <a href="{{ route('health') }}">/health</a>.
         </p>
 
