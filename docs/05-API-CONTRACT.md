@@ -1,6 +1,6 @@
 # REST API contract
 
-Base URL: `http://localhost:8080/api/v1` locally. Machine-readable contract: [openapi.json](api/openapi.json). Operations marked `x-status: implemented` there are served and checked against real responses by the test suite; `planned` operations (reports and export, M08) are not routed yet. Keep it, Postman and this document synchronized whenever behavior changes.
+Base URL: `http://localhost:8080/api/v1` locally. Machine-readable contract: [openapi.json](api/openapi.json). Every operation there is marked `x-status: implemented`, served, and checked against real responses by the test suite. Keep it, Postman and this document synchronized whenever behavior changes.
 
 ## Authentication and common conventions
 
@@ -242,3 +242,29 @@ Abilities only narrow access; they never widen it. The role check, the tenant sc
 ## CSV contract
 
 Columns in this order: transaction_id, external_ref, company, vehicle_plate, station, product_code, liters, unit_price_lbp, amount_lbp, amount_usd, rate_source, transacted_at_utc. Include a header, use UTF-8, stream with proper CSV escaping, and neutralize formula prefixes in textual cells. Apply the same filters and tenant scope as the transaction list; no page/per_page truncation. File response has Content-Type text/csv and Content-Disposition attachment.
+
+## Implemented behavior (M08)
+
+`GET /reports/consumption` and `GET /exports/transactions.csv` are live. Details the sections above leave open:
+
+- **Consumption report.**
+  - `group_by` is `company` (default), `vehicle` or `product`. Any other value is 422; it never reaches SQL.
+  - Rows are grouped by ID, so two companies with the same name stay two rows. The label is the current name (company), plate (vehicle) or "name (code)" (product).
+  - Grouping by vehicle uses the vehicle recorded on each purchase, not the card's current assignment. Card-only purchases form one row with `group_id` null, "No vehicle (card only)".
+  - Sums of the stored liters and LBP/USD amounts; nothing is repriced. Largest liters first, then `group_id`, null last.
+  - Dates and the 366-day limit are as for the transaction list, and the default is the current Beirut month. A manager's `company_id` is 422; unknown parameters are 422. The response is unpaginated.
+- **Accounting CSV.**
+  - The transaction list's filters, scope and validation, without `page`/`per_page` (422 if sent).
+  - Oldest first, by `transacted_at`, then `id`. `transacted_at_utc` is ISO 8601 with `Z`. Amounts are the stored snapshot strings.
+  - UTF-8 without a byte-order mark, RFC 4180 quoting: cells with a comma, quote, space or line break are quoted, and quotes are doubled.
+  - Text cells that start with `=`, `+`, `-` or `@` (also after spaces), a tab or a line break get a leading `'`.
+  - The file name is `fleetfuel-transactions-<first day>-to-<last day>.csv`, both Beirut dates and inclusive.
+  - The rows are read in chunks of 500 with a keyset cursor, inside one transaction, so the file is a consistent snapshot even while purchases arrive.
+- **Browser.** Signed-in admins and managers download the same file from `/exports/transactions.csv` (no bearer token in the browser). The report screens under `/reports` show all six reports. On the web, a manager's `company_id` is ignored rather than refused, as on the other list screens; their own company still applies.
+- **Other reports** (screens only; the API stays finite, as the endpoint table says):
+  - top stations: at most 10, most liters first, ties by station ID;
+  - quota exceptions: this Beirut month's counters against today's limits. Blocked cards, and cards at or over a limit, with the reason; archived cards are left out;
+  - tank overfills: liters above the tank capacity recorded at purchase time;
+  - rapid fills: less than 30 minutes after the vehicle's previous fill, including a previous fill just before the range; ties by ID;
+  - efficiency estimate: km since the previous fill divided by liters, full to full, from recorded readings only, null with a reason otherwise;
+  - delivery SLA: hours from the first history row to the delivered row, per governorate, for orders delivered in the range.

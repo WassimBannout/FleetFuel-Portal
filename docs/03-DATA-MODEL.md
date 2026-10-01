@@ -96,7 +96,7 @@ Source research's one row per date is insufficient for explicit intraday overrid
 | Timing | `transacted_at`, `quota_month date`, `created_at` (received time) |
 | Actor | `created_by FK users` |
 
-Unique `(station_id, external_ref)`. Index `(fuel_card_id, transacted_at, id)`, `(company_id, transacted_at, id)`, `(station_id, transacted_at, id)` and `(vehicle_id, transacted_at, id)`. Use `quota_month` for reconciliation; use UTC half-open ranges for date-filtered reports. Add product/time indexes only when query plans justify them.
+Unique `(station_id, external_ref)`. Index `(fuel_card_id, transacted_at, id)`, `(company_id, transacted_at, id)`, `(station_id, transacted_at, id)` and `(vehicle_id, transacted_at, id)`, plus `(transacted_at, id)`, added in M08 because query plans showed all-company reports and CSV chunks scanning the whole table ([REPORT-QUERY-PLANS.md](REPORT-QUERY-PLANS.md)). Use `quota_month` for reconciliation; use UTC half-open ranges for date-filtered reports. Add product/time indexes only when query plans justify them.
 
 Card references and external refs are uppercase ASCII. Validate then canonicalize; use the normalized value for storage/hash. This avoids MySQL versus SQL Server collation differences changing idempotency. Card numbers are identifiers in this demo, not payment credentials; do not expose full numbers unnecessarily in logs or dashboards.
 

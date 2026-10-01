@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "FleetFuel Portal API",
-    "version": "0.7.0",
-    "description": "REST API of the FleetFuel Portal, a fictional portfolio project. Operations with x-status \"implemented\" are served and checked against real responses by tests/Feature/Api/OpenApiContractTest.php and the per-endpoint API tests; x-abilities (all required) and x-any-abilities (at least one required) and x-roles are compared with the route middleware. Operations with x-status \"planned\" are not routed yet (reports and exports in M08). Business details: docs/04-BUSINESS-RULES.md and docs/05-API-CONTRACT.md."
+    "version": "0.8.0",
+    "description": "REST API of the FleetFuel Portal, a fictional portfolio project. Every operation is served and checked against real responses by tests/Feature/Api/OpenApiContractTest.php and the per-endpoint API tests; x-abilities (all required), x-any-abilities (at least one required) and x-roles are compared with the route middleware, and x-status records that each operation is implemented. Business details: docs/04-BUSINESS-RULES.md and docs/05-API-CONTRACT.md."
   },
   "servers": [
     {
@@ -2303,7 +2303,7 @@
       "get": {
         "operationId": "consumptionReport",
         "summary": "Tenant-scoped sums of immutable snapshots",
-        "x-status": "planned",
+        "x-status": "implemented",
         "x-milestone": "M08",
         "x-abilities": [
           "reports:read"
@@ -2437,14 +2437,15 @@
               "default": "company"
             }
           }
-        ]
+        ],
+        "description": "One row per company, vehicle or product (group_by, default company), grouped by ID so equal names never merge; largest liters first, then group_id with null last. Sums of the liters and LBP/USD amounts stored with each purchase: nothing is repriced. Grouping by vehicle uses the vehicle recorded on the purchase, and card-only purchases form one group with group_id null. from/to are Beirut dates [from, to), at most 366 days, default the current Beirut month. An admin may filter by company_id; a manager sees their own company and company_id is refused (422). Unknown parameters are 422. Unpaginated."
       }
     },
     "/exports/transactions.csv": {
       "get": {
         "operationId": "exportTransactions",
         "summary": "Export all scoped/filter-matched rows, with safe CSV cells",
-        "x-status": "planned",
+        "x-status": "implemented",
         "x-milestone": "M08",
         "x-abilities": [
           "exports:read"
@@ -2569,7 +2570,8 @@
           {
             "$ref": "#/components/parameters/product_code"
           }
-        ]
+        ],
+        "description": "Every purchase the caller may see that matches the filters of GET /transactions, without pagination (page and per_page are refused, 422), oldest first by (transacted_at, id). UTF-8 without a byte-order mark, a header row, then the columns transaction_id, external_ref, company, vehicle_plate, station, product_code, liters, unit_price_lbp, amount_lbp, amount_usd, rate_source, transacted_at_utc. Amounts are the stored snapshots. Text cells that start with =, +, - or @ (also after spaces), a tab or a line break get a leading apostrophe so spreadsheets do not run them as formulas. Content-Type text/csv; charset=UTF-8; Content-Disposition attachment."
       }
     }
   },

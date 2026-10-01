@@ -4,42 +4,43 @@ Updated: 2026-10-01
 
 ## Current state
 
-- **M07 diesel delivery workflow is DONE and verified locally on MySQL 8.4**, on top of M00–M06.
-  - `DeliveryOrderService` writes every order change, for the web screens, the API and the demo seed:
-    - pending → scheduled → out_for_delivery → delivered, and cancellation from any open status;
-    - the order row is locked, then the role, `expected_status` (409 `stale_state`) and the state machine (409 `invalid_transition`) are checked;
-    - one history row and one audit row are written in the same transaction.
-  - Managers request orders for their own company and may only cancel their own pending ones. Only admins schedule (future window plus truck), dispatch and deliver. Deliveries never touch fuel cards, quotas or the ledger.
-  - API: `GET`/`POST /api/v1/delivery-orders`, `GET /api/v1/delivery-orders/{id}`, `PATCH /api/v1/delivery-orders/{id}/status`. They are marked `implemented` in `openapi.json` (0.7.0) and checked against real responses; the status route's any-of token ability is checked too.
-  - Screens: **Deliveries** in the navigation bar.
-    - A list with search, status and (admin) company filters.
-    - A request form; admins pick the company first.
-    - An order page with details, timeline, admin audit rows and the permitted next steps. The status buttons are sent with jQuery (CSRF header, `expected_status`) and reload the server-rendered panel after a success or a 409; they still work as plain forms without JavaScript.
-  - Postman folder 03 is enabled and self-contained: its own manager and admin tokens, revoked at the end.
-- Dev database: everything listed for M06, plus four delivery orders from M07's live checks, all for Atlas Logistics with fictional addresses:
-  - 7, delivered (Newman, truck `TRK-PM`);
-  - 8, cancelled by its manager (Newman);
-  - 9 and 10, delivered (jsdom UI check, truck `TRK-UI`).
+- **M08 SQL reports and accounting CSV is DONE and verified locally on MySQL 8.4**, on top of M00–M07.
+  - `app/Repositories/ReportRepository.php`: bound SQL with allowlisted grouping for:
+    - consumption by company, vehicle or product (grouped by ID, from the stored snapshots, never repriced);
+    - top stations;
+    - this month's quota exceptions with reasons;
+    - tank overfills;
+    - rapid fills (`LAG()` with a 30-minute lookback before the range);
+    - a full-to-full efficiency estimate (a bounded lookback of one fill per vehicle);
+    - delivery SLA from the status history.
 
-  Seeded orders 1–6 are unchanged. Purchases are still 36 and `usage:reconcile` matches. No `postman-local` tokens are left.
-- Not built yet: reports and CSV export (M08), UI polish (M09).
-- Local URL: <http://localhost:8080> (sign-in `/login`, deliveries `/deliveries`, readiness `/health`, liveness `/up`, API base `/api/v1`).
+    `ReportScope` pins a manager to their own company.
+  - API: `GET /api/v1/reports/consumption` and `GET /api/v1/exports/transactions.csv`. `openapi.json` 0.8.0 has no `planned` operation left.
+  - The CSV uses the transaction list's own filters (`TransactionFilters`). It streams in keyset chunks inside one snapshot, quotes cells and neutralizes spreadsheet formulas.
+  - Screens: **Reports** in the navigation bar (six pages under `/reports`, a date and company filter), and the same CSV as a browser download from the consumption page.
+  - New index `fuel_transactions (transacted_at, id)` and the read-only `php artisan reports:explain`, both backed by measured plans in `docs/REPORT-QUERY-PLANS.md`.
+  - Postman folder 04 is enabled and self-contained.
+- Dev database: everything listed for M07, plus the new index (an additive migration, applied with `php artisan migrate`). M08's live checks only read data; their token was revoked and their sessions signed out. Purchases are still 36 and `usage:reconcile` matches.
+- Not built yet: the dashboard finish, the AJAX transaction list and the UI polish (M09).
+- Local URL: <http://localhost:8080> (sign-in `/login`, reports `/reports`, readiness `/health`, liveness `/up`, API base `/api/v1`).
 - Git: branch `main` tracks `origin/main` (github.com/WassimBannout/FleetFuel-Portal).
-  - M06 is `a59210f`. GitHub Actions run 36734519806 passed on it: Pint PASS on 268 files, Larastan OK twice, 481 tests / 4242 assertions (95.80 s), npm 0 vulnerabilities, Vite build OK, and the repeated-setup step passed.
-  - M07 is committed and pushed in the commit that contains this file. Its CI result had not been observed when this file was written.
+  - M07 is `93415df`. GitHub Actions run 36838076726 passed on it: Pint PASS on 284 files, Larastan OK twice, 508 tests / 4937 assertions (106.54 s), npm 0 vulnerabilities, Vite build OK, and the repeated-setup step passed.
+  - M08 is committed and pushed in the commit that contains this file. Its CI result had not been observed when this file was written.
 
 ## Next action
 
-Execute `prompts/08-reports-exports.md` (M08): the SQL reports, `GET /api/v1/reports/consumption` and the CSV export `GET /api/v1/exports/transactions.csv` (T29–T33).
+Execute `prompts/09-ui-polish.md` (M09):
+- the role-scoped dashboard;
+- the AJAX transaction list with filters and totals, protected against stale responses;
+- responsive navigation, accessible forms, loading, empty and error states;
+- real screenshots and the five-minute walkthrough (T34).
 
-Starting points from M07:
+Starting points from M08:
 
-- **Delivery SLA (T33):** measure from the initial pending history row (`from_status` null) to the delivered row, both in `delivery_status_history`, and group by the stored `governorate` (free text; the form only suggests names). Cancelled and pending orders are excluded.
-  - On the demo seed, orders 1 (Atlas, Beirut: 74 h from request to delivery) and 2 (Cedar, Mount Lebanon: 51 h) are delivered.
-  - The dev database also has delivered orders 7, 9 and 10, created and delivered minutes apart.
-- **Route parity:** the two report/export operations are still `x-status: planned`. Switching them to `implemented` makes `OpenApiContractTest` require matching routes; `x-any-abilities` exists if a route ever needs one of several abilities.
-- **Reuse:** `RespondsWithPages`, `PaginatedListRequest`/`ListCompanyRecordsRequest`, `ChecksOpenApiContract`, `CallsApi`, `FiltersLists` for the screens, and `RunsConcurrentWorkers` if a report test needs real concurrency.
-- **Postman:** folder 04 exists but is not built; folder 03 shows how to make a folder self-contained (its own tokens, revoked at the end).
+- **Transaction list:** the web screen does not exist yet. Build it on `App\Support\TransactionFilters` and the `FiltersTransactions` request trait, as the API list and both CSV routes do. Then its totals, the API totals and the CSV (`/exports/transactions.csv` with the same query string) cover the same rows by construction (T34 "totals agree with export").
+- **Dashboard quota warnings:** `ReportRepository::quotaExceptions($companyId, BusinessMonth::for(now()))` already gives the cards and the reasons.
+- **Reports in the UI pass:** the six pages are plain server-rendered tables with a GET filter form, with no JavaScript yet. Their headings and filters are the place to check keyboard order and mobile width.
+- **Measuring:** `php artisan reports:explain --analyze` shows real plans if a new query is added. Re-measure neighboring queries after adding an index (docs/REPORT-QUERY-PLANS.md, "A regression found while measuring").
 
 ## Milestone ledger
 
@@ -53,7 +54,7 @@ Starting points from M07:
 | M05 POS ingestion | DONE | On MySQL through the real HTTP stack: T13–T19, T23 and the ledger parts of T10/T12. T20–T22 use genuinely overlapping PHP processes, each with its own connection, on a dedicated database: no double spend at the quota edge (80 + 15 + 15 of 100 L; 6 × 20 L of 100 L), one purchase per identical concurrent retry, one winner + 409 for a conflicting or cross-card shared reference (settled by the unique index), and card edits serialized with ingestion in both orders. Live walkthrough through nginx. `make verify`: 441 tests, 3355 assertions |
 | M06 API/tooling | DONE | T24 on MySQL: `openapi.json` valid against the official OpenAPI 3.1 schema (a broken copy fails with exactly the injected errors); routes, abilities and roles match it and planned operations are unrouted; every response in the API tests is validated against the documented status, headers and schema, including 400/401/403/404/409/422/429 (with `Retry-After`)/503. T25: the simulator's five scenarios over real HTTP on fresh cards (Integration suite, and live through nginx: ledger +1); Postman folders 01/02/05 with Newman 6: 26 requests, 51 assertions, 0 failures (ledger +1). `make verify`: 481 tests, 4242 assertions |
 | M07 Deliveries | DONE | T26–T28 on MySQL. Creation writes the initial history. Each accepted change writes exactly one history row and one audit row, and both roll back with the order when either write is forced to fail. Skipped, repeated, stale and final-status changes and manager escalation are refused with nothing written. Token abilities are checked per role; another company's order is 404. T28: separate PHP processes through the real HTTP kernel; two admins, or an admin and a manager, from the same expected status give one 200 and one 409 `stale_state`; the commit and rollback orderings are covered too. Live: Postman folder 03 with Newman (19 requests, 38 assertions, 0 failures) and the real jQuery module in jsdom through nginx (12/12). `make verify`: 508 tests, 4937 assertions |
-| M08 Reporting | TODO | Depends on M07 |
+| M08 Reporting | DONE | T29–T33 on MySQL against the demo seed. Consumption totals per company ID worked out by hand (515.00 L / 41,675,000.00 LBP and 325.00 L / 26,775,000.00 LBP; USD equal to the stored per-purchase sum). Equal names never merge; vehicle grouping follows the purchase snapshot; new prices and rates change nothing. Quota exceptions: a reduced limit, a limit reached exactly, blocked and archived cards; a declined POS purchase adds nothing. Rapid fills: exactly 30 min not flagged, 29:59 flagged, same-second fills by ID, the predecessor read from before the range start, card-only purchases never flagged. Efficiency from recorded readings only. SLA from the history rows. Top stations ties by ID. CSV: tenant and date scope, every row across chunks, the same totals as the ledger list, RFC 4180 quoting and formula neutralization, identical to the browser download. Cross-tenant checks on every report and the export. 11 deliberate breakages all caught. Query plans on 64,032 purchases led to one new index. `make verify`: 544 tests, 5312 assertions |
 | M09 UI polish | TODO | Depends on M08 |
 | M10 Release quality | TODO | Depends on M09 |
 | M11 Shipping/portfolio | TODO | Depends on M10; live deployment may need user account |
@@ -61,7 +62,142 @@ Starting points from M07:
 
 Use TODO / IN PROGRESS / DONE / BLOCKED. A milestone is DONE only when its checks pass. If an external prerequisite blocks one part, record exactly which part and finish independent local work.
 
-## Most recent session: M07
+## Most recent session: M08
+
+**Date / milestone:** 2026-10-01, M08 SQL reports and accounting CSV.
+
+**Goal and actual state:**
+- Goal (prompts/08-reports-exports.md):
+  - bound SQL in `ReportRepository` for every listed report;
+  - ID-based grouping and snapshot ownership;
+  - deterministic windows and correct predecessor lookback;
+  - tenant-scoped filtered totals and a safe streaming CSV;
+  - documented query plans and indexes, and no repricing.
+
+  Verify totals against fixtures, cross-tenant access, the quota reduction report, the rapid-fill boundary, formula neutralization and the delivery SLA (T29–T33).
+- Result: done, and all local gates pass on MySQL.
+- M07 had nothing outstanding: the tree was clean, `main` matched `origin/main` at `93415df`, and GitHub CI run 36838076726 had passed on it.
+
+### What was built
+
+- **Repository and scope:** `app/Repositories/ReportRepository.php`:
+  - `consumption`, `topStations`, `quotaExceptions` (with reasons), `tankOverfills`, `rapidFills`, `efficiency`, `deliverySla`;
+  - `App\Support\ReportScope`, which pins a manager to their own company, with `forConsole` for diagnostics;
+  - the Gate abilities `viewReports` and `exportTransactions`.
+- **Shared filters:**
+  - `App\Support\TransactionFilters`;
+  - the request traits `FiltersBusinessDates` (dates, the 366-day limit, the UTC range) and `FiltersTransactions` (the ledger filters);
+  - `ListTransactionsRequest` and `TransactionController::index` now use them, with the same behavior.
+- **CSV:**
+  - `App\Services\TransactionCsvExport` (keyset chunks inside one transaction, `fputcsv` with RFC 4180 quoting);
+  - `App\Support\CsvCell`;
+  - config `fleetfuel.exports.chunk_size` (500).
+- **API:**
+  - `Api\V1\ReportController@consumption` and `Api\V1\TransactionExportController`;
+  - `ConsumptionReportRequest` and `ExportTransactionsRequest`;
+  - two routes. `openapi.json` 0.8.0 marks both `implemented`, with descriptions.
+- **Web:**
+  - `Web\ReportController` (six pages) and `Web\TransactionExportController`;
+  - `Requests\Reports\{ReportRequest, ExportTransactionsRequest}`;
+  - views `reports/{_header, consumption, top-stations, quota-exceptions, anomalies, efficiency, delivery-sla}`;
+  - the Reports nav link.
+- **Database:** migration `2026_10_01_120000_add_transacted_at_index_to_fuel_transactions_table`.
+- **Diagnostics:** `php artisan reports:explain` (`app/Console/Commands/ExplainReports.php`).
+- **Tests (36 new, 2 changed):**
+  - `tests/Feature/Reports/{ReportRepositoryTest 12, ReportScreensTest 6}`;
+  - `tests/Feature/Api/ReportApiTest` (6);
+  - `tests/Unit/Support/CsvCellTest` (12 cases).
+  - `OpenApiContractTest` now requires no planned operation, and `ChecksOpenApiContract` checks non-JSON (CSV) responses by media type.
+- **Postman:** folder 04 rebuilt (10 requests); the environment template gained `report_manager_token` (blank).
+- **Docs:**
+  - `docs/REPORT-QUERY-PLANS.md` (new);
+  - `docs/05-API-CONTRACT.md` ("Implemented behavior (M08)");
+  - `docs/DECISIONS.md` (M08 record);
+  - `docs/03-DATA-MODEL.md` (the new index);
+  - README ("Reports and the accounting CSV", API table, Postman);
+  - `postman/README.md`, CHANGELOG, this file.
+
+### Checks: exact command and actual outcome
+
+All PHP commands ran as `docker compose run --rm app …` against the isolated MySQL test databases, unless stated otherwise.
+
+| Command | Outcome |
+| --- | --- |
+| `git status`, `git rev-parse HEAD origin/main`, `gh run list` at the start | Clean tree; both at `93415df`; run 36838076726 success |
+| `TransactionReadApiTest` + `OpenApiContractTest`, after moving the ledger filters into shared code | 25 passed / 298 assertions: the list behaves as before |
+| Pint and Larastan after the repository, requests, controllers and views | Pint fixed one import order (`AppServiceProvider`); Larastan `[OK] No errors` |
+| Every report query against the dev database (tinker, September and October) | All ran on MySQL. The 75 L overfill and the 1,200 s rapid fill were flagged, card-only purchases formed one null-ID vehicle group, and seed order 1 came out at 74.00 h |
+| `OpenApiContractTest`, after marking both operations implemented | 7 passed / 188 assertions |
+| `ReportRepositoryTest` | 12 passed / 55 assertions on the first run |
+| `ReportApiTest` + `CsvCellTest` | 18 passed / 211 assertions on the first run |
+| `ReportScreensTest`, first run | **2 failed, 4 passed**, both my test's mistakes: I guessed Atlas's per-station liters (255/260) instead of working them out (290/225), and expected a full card number although the quota page masks card numbers. Fixed: 6 passed / 107 assertions. I then made the manager's quota check meaningful: it could never fail, so it now blocks a Cedar card and asserts that the admin sees it and the manager does not |
+| Negative checks R1–R11 (each file mutated, tests run, file restored and checksum-verified) | All 11 caught; see the list below this table |
+| `php artisan reports:explain`, first try on dev | Failed with `HY093`: MySQL accepts no placeholders in `EXPLAIN`. The command now inlines the values with the connection's own escaping, only for EXPLAIN |
+| Representative plans in a throwaway database `fleetfuel_test_explain` (migrate, seed, 2,000 shifted copies of each purchase = 64,032 rows, `ANALYZE TABLE`; dropped afterwards) | My first attempt did not create the database: zsh does not split an unquoted `$E`, so `docker compose run` got one malformed argument. Rerun with explicit flags. First measurement: all-company reports and each CSV chunk scanned all 64,032 rows (85–110 ms); the efficiency estimate read 56,028 rows of history (747 ms). After adding the `(transacted_at, id)` index and bounding the efficiency lookback, the efficiency estimate stayed slow (861 ms): MySQL walked the new time index backwards per vehicle (26,057 rows each). Ordering that lookup by `vehicle_id` too fixed it (44.5 ms, then 58.7 ms in the final capture). Full table: `docs/REPORT-QUERY-PLANS.md` |
+| Report tests after these two changes | 24 passed / 363 assertions |
+| `php artisan migrate` on the dev database | `2026_10_01_120000_add_transacted_at_index_to_fuel_transactions_table` DONE (adds an index; changes no data) |
+| `docker compose restart app`, then **Newman folder 04** (`npx --yes newman@6 … --folder "04 — Reports and export (M08)"` in the node container, through nginx, password in an environment variable) | **10 requests, 24 assertions, 0 failures** on the first run. Company, vehicle and product groupings, the ledger totals and the CSV agreed on the same liters for 2025-10-06 to 2026-10-03; the CSV row count equalled the ledger total; `company_id` and `group_by=station` were refused (422); the token was revoked (204, then 401) |
+| Browser smoke test through nginx (one-off Node script, not committed; signs in as the Atlas manager with the password from the environment) | All six report pages 200 without Cedar data. The browser CSV returned 200 with `text/csv; charset=UTF-8`, `attachment; filename=fleetfuel-transactions-2026-08-01-to-2026-09-30.csv`, and its liters matched the page total (1200.00). One check failed because of my script: it split lines on commas, but `fputcsv` quotes cells containing a space (`"Atlas Logistics"`). Checked through the exporter itself: all 23 rows are Atlas Logistics. Signed out afterwards |
+| `make verify` #1 | exit 2: Pint `single_quote` in my new screens test. Fixed with Pint |
+| `make verify` #2 | exit 2: Larastan `method.alreadyNarrowedType` in the SLA test. It calls `deliverySla()` again after changing the order columns, and PHPStan assumes the same call returns the same value. `@phpstan-impure` on the method did not change that (cache cleared too), so I removed the tag; the test now computes again through a freshly resolved repository |
+| `make verify` #3 | exit 0: Pint PASS on 305 files, Larastan `[OK] No errors`, simulator PHPStan `[OK] No errors`, **544 tests / 5312 assertions** (176.30 s), npm 0 vulnerabilities, Vite build OK |
+| `sh docker/bin/check-setup-preserves-state.sh` | PASS: repeated setup kept APP_KEY, credentials and database rows; `migrate:status` lists the new migration as run |
+| `php artisan usage:reconcile` (dev) | "All monthly usage counters match the ledger." |
+
+Negative checks:
+- **R1**, a manager given the admin's company filter: 3 tests failed (repository, screens and API scope).
+- **R2**, no lookback before the range start: the rapid-fill test failed.
+- **R3**, `<=` instead of `<` (exactly 30 minutes counted as rapid): the rapid-fill test failed.
+- **R4**, grouping by label instead of ID: the equal-names test failed.
+- **R5**, vehicle taken from the card's current assignment: the snapshot test failed.
+- **R6**, formula neutralization disabled: the CSV test and 8 `CsvCell` cases failed.
+- **R7**, the keyset cursor re-reading the last row of each chunk: the chunking test failed (the files differed).
+- **R8**, SLA from the order's `created_at`/`delivered_at`: the history-boundary test failed.
+- **R9**, `>` instead of `>=` in quota exceptions: the "limit reached exactly" case failed.
+- **R10**, the `group_by` allowlist removed from the request: the API test got 500 instead of 422. The repository's own allowlist still refused (`InvalidArgumentException: Unknown consumption grouping "station"`), so no SQL ran: defense in depth, and the request is what turns it into a proper 422.
+- **R11**, tank overfill compared against the vehicle's current capacity: the snapshot test failed.
+
+### Not run or not verified
+
+- GitHub CI for the M08 commit (reported in the session reply after the push).
+- A real browser: the report pages ran in feature tests and through nginx with a script, not in a browser. Visual, keyboard and mobile checks are M09.
+- The Postman desktop app: folder 04 ran with Newman 6.
+- Query plans at a scale beyond the demo's shape: 64,032 purchases but still 2 companies, 10 cards and 16 history rows.
+- Carried over: the 503 `temporarily_unavailable` path, the simulator with a host PHP outside Docker, SQL Server (S01). The report SQL deliberately refuses other drivers.
+
+### Decisions and deviations
+
+All are in `docs/DECISIONS.md` (2026-10-01, M08):
+
+- raw bound SQL with an allowlist, and `ReportScope`;
+- snapshots only, never repriced;
+- the rapid-fill lookback and the bounded efficiency lookback;
+- quota exceptions on today's limits, with "reached" counted;
+- the SLA from history rows, MySQL only;
+- the shared ledger filters;
+- the CSV streaming, snapshot, quoting and neutralization;
+- the `(transacted_at, id)` index and the plan regression it caused, then fixed;
+- `reports:explain`;
+- the screen conventions;
+- the self-contained Postman folder 04.
+
+No product rule changed.
+
+### Remaining work and blockers
+
+None for M08.
+- Carried over: the seed's `fuel_card.limits_changed` versus the service's `card.limits_changed` audit names (for M10).
+- Deliberately later: the web transaction list with AJAX filters and totals, dashboard quota warnings, screenshots and the accessibility pass (M09).
+
+**Suggested commit message:** `feat: add SQL consumption reports and scoped accounting exports`.
+
+**One concept to explain:** what each piece of a report query is for.
+- **WHERE, then GROUP BY, then HAVING.** WHERE picks rows before grouping: the tenant and the date range, so a manager's other-company rows never reach the totals. GROUP BY folds the remaining rows into one row per company, vehicle or product ID; grouping by ID, not name, keeps two "Atlas Logistics" apart. HAVING would filter whole groups after the sums, such as "vehicles over 500 L". None of these reports needs that, so it is not used.
+- **LAG().** A window function that reads the previous row in an order you choose (here, the same vehicle by time, then ID), without collapsing rows the way GROUP BY does. That makes "minutes since this vehicle's previous fill" one query. The window only sees the rows you give it, so the query must include the predecessor of the first fill in range: 30 minutes back for rapid fills, one row per vehicle for the efficiency estimate.
+- **Bound values, allowlisted identifiers.** A date or company ID is data and goes in as a `?` binding, so it can never become SQL. A column or join cannot be bound, so the request's `group_by` only selects one of three fixed fragments written in the code (R10 shows both gates).
+- **Index tradeoffs.** An index is a sorted copy of some columns. It turns "check every row" into "read a range", at the cost of one more entry per write. The time index made the admin reports about 5–10× faster. It also tempted MySQL into a worse plan for a query nobody touched, so measure the neighbors after adding one.
+
+## Earlier session: M07
 
 **Date / milestone:** 2026-09-30 to 2026-10-01, M07 diesel delivery workflow.
 
@@ -153,7 +289,7 @@ Negative checks:
 
 ### Not run or not verified
 
-- GitHub CI for the M07 commit (reported in the session reply after the push).
+- GitHub CI for the M07 commit was not observed when this log was written. It was checked after the push: run 36838076726 passed (508 tests / 4937 assertions).
 - A real browser: the jQuery module ran in jsdom, which has no layout, focus or visual rendering. Visual, keyboard and mobile checks are M09.
 - The Postman desktop app: folder 03 ran with Newman 6.
 - Carried over: the 503 `temporarily_unavailable` path, the simulator with a host PHP outside Docker, SQL Server (S01).

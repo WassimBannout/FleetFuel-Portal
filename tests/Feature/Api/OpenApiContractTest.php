@@ -65,8 +65,8 @@ class OpenApiContractTest extends TestCase
 
     /**
      * Route parity: every implemented operation is routed with the documented
-     * token abilities and roles, every route is documented, and planned
-     * operations (reports, exports) are not routed yet.
+     * token abilities and roles, every route is documented, and nothing is
+     * left planned.
      */
     public function test_routes_match_the_documented_operations_abilities_and_roles(): void
     {
@@ -111,11 +111,8 @@ class OpenApiContractTest extends TestCase
         ksort($routed);
         $this->assertSame($implemented, $routed);
 
-        sort($planned);
-        $this->assertSame([
-            'GET /exports/transactions.csv',
-            'GET /reports/consumption',
-        ], $planned);
+        // M08 implemented the last planned operations.
+        $this->assertSame([], $planned);
     }
 
     public function test_token_responses_match_the_contract(): void

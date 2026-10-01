@@ -1810,6 +1810,139 @@
       "name": "04 — Reports and export (M08)",
       "item": [
         {
+          "name": "Issue manager token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": "{{base_url}}/auth/token",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{manager_email}}\",\n  \"password\": \"{{demo_password}}\",\n  \"device_name\": \"postman-local\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// The last 360 days, so the demo history is included whatever today is.",
+                  "const day = (offset) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);",
+                  "pm.variables.set(\"report_from\", day(-360));",
+                  "pm.variables.set(\"report_to\", day(2));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "const token = pm.response.json().data.token;",
+                  "pm.test(\"Token is present\", () => pm.expect(token).to.be.a(\"string\").and.not.empty);",
+                  "pm.environment.set(\"report_manager_token\", token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consumption by company",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{report_manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/reports/consumption?from={{report_from}}&to={{report_to}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const cents = (value) => { const [whole, fraction = \"\"] = String(value).split(\".\"); return Number(whole) * 100 + Number((fraction + \"00\").slice(0, 2)); };",
+                  "const rows = pm.response.json().data;",
+                  "pm.test(\"Only the manager's own company\", () => { pm.expect(rows).to.have.length(1); pm.expect(rows[0].group_id).to.be.a(\"number\"); });",
+                  "pm.test(\"Decimal strings\", () => pm.expect(rows[0].liters).to.match(/^\\d+\\.\\d{2}$/));",
+                  "pm.variables.set(\"report_cents\", String(cents(rows[0].liters)));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consumption by vehicle",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{report_manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/reports/consumption?from={{report_from}}&to={{report_to}}&group_by=vehicle"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const cents = (value) => { const [whole, fraction = \"\"] = String(value).split(\".\"); return Number(whole) * 100 + Number((fraction + \"00\").slice(0, 2)); };",
+                  "const rows = pm.response.json().data;",
+                  "const total = rows.reduce((sum, row) => sum + cents(row.liters), 0);",
+                  "pm.test(\"Liters add up to the company total\", () => pm.expect(total).to.eql(Number(pm.variables.get(\"report_cents\"))));",
+                  "pm.test(\"Card-only purchases have a null group\", () => rows.filter((row) => row.group_id === null).forEach((row) => pm.expect(row.label).to.include(\"No vehicle\")));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Consumption by product",
           "request": {
             "method": "GET",
@@ -1824,12 +1957,12 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{manager_token}}",
+                  "value": "{{report_manager_token}}",
                   "type": "string"
                 }
               ]
             },
-            "url": "{{base_url}}/reports/consumption?group_by=product"
+            "url": "{{base_url}}/reports/consumption?from={{report_from}}&to={{report_to}}&group_by=product"
           },
           "event": [
             {
@@ -1837,14 +1970,18 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const cents = (value) => { const [whole, fraction = \"\"] = String(value).split(\".\"); return Number(whole) * 100 + Number((fraction + \"00\").slice(0, 2)); };",
+                  "const rows = pm.response.json().data;",
+                  "const total = rows.reduce((sum, row) => sum + cents(row.liters), 0);",
+                  "pm.test(\"Liters add up to the company total\", () => pm.expect(total).to.eql(Number(pm.variables.get(\"report_cents\"))));"
                 ]
               }
             }
           ]
         },
         {
-          "name": "Accounting CSV",
+          "name": "Ledger totals for the same range",
           "request": {
             "method": "GET",
             "header": [
@@ -1858,12 +1995,12 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{manager_token}}",
+                  "value": "{{report_manager_token}}",
                   "type": "string"
                 }
               ]
             },
-            "url": "{{base_url}}/exports/transactions.csv"
+            "url": "{{base_url}}/transactions?from={{report_from}}&to={{report_to}}&per_page=1"
           },
           "event": [
             {
@@ -1872,8 +2009,190 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
-                  "pm.test(\"CSV content type\", () => pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"text/csv\"));",
-                  "pm.test(\"Header present\", () => pm.expect(pm.response.text()).to.include(\"transaction_id,external_ref\"));"
+                  "const cents = (value) => { const [whole, fraction = \"\"] = String(value).split(\".\"); return Number(whole) * 100 + Number((fraction + \"00\").slice(0, 2)); };",
+                  "const meta = pm.response.json().meta;",
+                  "pm.test(\"Ledger totals equal the report\", () => pm.expect(cents(meta.totals.liters)).to.eql(Number(pm.variables.get(\"report_cents\"))));",
+                  "pm.variables.set(\"report_rows\", String(meta.total));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Accounting CSV for the same range",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "text/csv"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{report_manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/exports/transactions.csv?from={{report_from}}&to={{report_to}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const cents = (value) => { const [whole, fraction = \"\"] = String(value).split(\".\"); return Number(whole) * 100 + Number((fraction + \"00\").slice(0, 2)); };",
+                  "pm.test(\"CSV attachment\", () => { pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"text/csv\"); pm.expect(pm.response.headers.get(\"Content-Disposition\")).to.include(\"attachment\"); });",
+                  "const parse = require(\"csv-parse/lib/sync\");",
+                  "const records = parse(pm.response.text(), { columns: true });",
+                  "pm.test(\"Header and columns\", () => pm.expect(pm.response.text().split(\"\\n\")[0]).to.eql(\"transaction_id,external_ref,company,vehicle_plate,station,product_code,liters,unit_price_lbp,amount_lbp,amount_usd,rate_source,transacted_at_utc\"));",
+                  "pm.test(\"Every ledger row, no page limit\", () => pm.expect(records.length).to.eql(Number(pm.variables.get(\"report_rows\"))));",
+                  "pm.test(\"CSV liters equal the report\", () => pm.expect(records.reduce((sum, row) => sum + cents(row.liters), 0)).to.eql(Number(pm.variables.get(\"report_cents\"))));",
+                  "pm.test(\"One company only\", () => pm.expect(new Set(records.map((row) => row.company)).size).to.be.at.most(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager company_id refused (422)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{report_manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/reports/consumption?company_id=1"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 422\", function () { pm.response.to.have.status(422); });",
+                  "pm.test(\"company_id named\", () => pm.expect(pm.response.json().error.details).to.have.property(\"company_id\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unknown grouping refused (422)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{report_manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/reports/consumption?group_by=station"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 422\", function () { pm.response.to.have.status(422); });",
+                  "pm.test(\"group_by named\", () => pm.expect(pm.response.json().error.details).to.have.property(\"group_by\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoke manager token",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{report_manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/auth/token"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoked manager token rejected",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{report_manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/reports/consumption"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });"
                 ]
               }
             }

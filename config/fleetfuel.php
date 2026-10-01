@@ -47,6 +47,11 @@ return [
         'max_event_age_hours' => 72,
     ],
 
+    'exports' => [
+        // Ledger rows read per query while streaming the accounting CSV.
+        'chunk_size' => 500,
+    ],
+
     'demo' => [
         'enabled' => env('DEMO_MODE', false),
         'password' => env('DEMO_PASSWORD'),

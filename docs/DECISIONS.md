@@ -288,3 +288,31 @@ Template: date, affected decision, old/new behavior, reason, spec/test updates, 
 - Checking the JavaScript: there is no JavaScript test framework in the MVP. The module was run once in jsdom against the live app (real sessions and CSRF, password from the environment); the harness is not committed. That is not a real browser, and visual and keyboard checks are M09.
 - Postman folder 03 is self-contained. It issues its own manager and admin tokens (`delivery_manager_token`, `admin_token`) and revokes both at the end, so it runs alone without making a purchase, and does not interfere with folders 02 and 05.
 
+2026-10-01 (M08): SQL reports and the accounting CSV. No product rule changed. The API contract gained an "Implemented behavior (M08)" section; the points below fill in details the specs leave open, plus one index added after measuring.
+
+- `app/Repositories/ReportRepository.php` holds every report query as raw SQL with bound values. Identifiers (the grouping column, label expression and join for each `group_by`) come from a constant allowlist. An unknown grouping throws before any SQL runs, so the request's validation (422) is the first gate and the repository the second.
+- Tenant scope: `App\Support\ReportScope` pins a company manager to their own company whatever the request says. An admin sees every company unless they choose one; station operators get no reports. The Gate abilities `viewReports` and `exportTransactions` admit active admins and managers.
+- Snapshots only:
+  - grouping by vehicle uses `fuel_transactions.vehicle_id`;
+  - tank overfills use `fuel_transactions.tank_capacity_l`;
+  - the efficiency estimate uses the odometer recorded at the pump;
+  - amounts are the stored LBP/USD values.
+
+  Card assignments, current vehicle capacities and odometers, and today's prices and rates are never joined in. Tests change each of them and show the reports unchanged.
+- Rapid fills: `LAG()` over `(transacted_at, id)` per vehicle, reading 30 minutes before the range start, so the first fill in range can be flagged without reading older history. Exactly 30 minutes is not rapid.
+- Efficiency estimate: the window gets the fills in range plus each vehicle's last fill before the range (one indexed lookup per vehicle), not the whole history. The division uses brick/math, half up, 2 decimals. It is null, with a reason, without a previous fill, without readings on both fills, or when the reading did not increase.
+- Quota exceptions: today's limits against this Beirut month's counter. A card is listed when blocked or when usage is at or over a limit, so "nothing left" counts. Archived cards are left out. The date filter does not apply to this report, and the screen says so.
+- Delivery SLA: from the history rows (the first null → pending row and the delivered row), not the order's `created_at`/`delivered_at` columns, filtered by delivery time and grouped by the stored governorate. Hours are computed from summed seconds with brick/math. Timestamp differences use MySQL's `TIMESTAMPDIFF`. The repository throws a clear error on other drivers: SQL Server is S01.
+- Shared ledger filters: `App\Support\TransactionFilters` and the `FiltersTransactions`/`FiltersBusinessDates` request traits now serve the transaction list, both CSV routes and the reports, so a list's totals and the CSV of the same filter cover the same rows. The transaction list's behavior is unchanged; its tests pass as before.
+- CSV export (`App\Services\TransactionCsvExport`):
+  - streamed with `fputcsv` (RFC 4180, empty escape character);
+  - read in chunks of `fleetfuel.exports.chunk_size` (500) with a keyset cursor on `(transacted_at, id)` rather than OFFSET;
+  - all chunks inside one transaction, which InnoDB's repeatable read turns into a consistent snapshot;
+  - no byte-order mark;
+  - formula neutralization by a leading apostrophe (`App\Support\CsvCell`), applied to every text column.
+- Index: `fuel_transactions (transacted_at, id)` (migration `2026_10_01_120000`), added because `EXPLAIN ANALYZE` on about 64,000 purchases showed all-company reports and every CSV chunk scanning the whole table. A manager's queries keep using `(company_id, transacted_at, id)`.
+  - Adding it made MySQL serve the efficiency estimate's per-vehicle lookup through the new index (about 570 ms). Ordering that lookup by `vehicle_id` too returns the same row and restores the vehicle index (28–59 ms).
+  - Details, plans and the reproduction steps: [REPORT-QUERY-PLANS.md](REPORT-QUERY-PLANS.md). `php artisan reports:explain [--analyze] [--company=] [--from=] [--to=]` prints the plans; it is read-only.
+- Screens: one page per report under `/reports` with a shared date and company filter. The CSV form on the consumption page uses the same dates and company. Card numbers are masked as on the card list. A manager's `company_id` in the URL is ignored, as on the other web lists (the API refuses it).
+- Postman folder 04 is self-contained like folder 03, with its own manager token, revoked at the end. It checks that the three groupings, the ledger totals and the CSV agree for a 360-day range computed at run time.
+

@@ -5,9 +5,11 @@ use App\Http\Controllers\Api\V1\DeliveryOrderController;
 use App\Http\Controllers\Api\V1\DriverController;
 use App\Http\Controllers\Api\V1\FuelCardController;
 use App\Http\Controllers\Api\V1\ProductPriceController;
+use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\StationController;
 use App\Http\Controllers\Api\V1\TokenController;
 use App\Http\Controllers\Api\V1\TransactionController;
+use App\Http\Controllers\Api\V1\TransactionExportController;
 use App\Http\Controllers\Api\V1\VehicleController;
 use Illuminate\Support\Facades\Route;
 
@@ -15,8 +17,6 @@ use Illuminate\Support\Facades\Route;
 // bearer tokens authenticate here: config/sanctum.php has no session guard,
 // so a browser cookie never counts. Token abilities are necessary but never
 // sufficient: role middleware, scoped lookups and policies still apply.
-// Report and export endpoints (M08) are documented as planned in the
-// OpenAPI file and not routed yet.
 
 Route::prefix('v1')->name('api.v1.')->group(function () {
     // Public: credentials in, token out; 5 requests/minute per email + IP.
@@ -77,6 +77,10 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
                 ->middleware('ability:deliveries:status,deliveries:write')
                 ->whereNumber('delivery')
                 ->name('delivery-orders.status');
+
+            // Reports and the accounting CSV, scoped like the ledger list.
+            Route::get('reports/consumption', [ReportController::class, 'consumption'])->middleware('abilities:reports:read')->name('reports.consumption');
+            Route::get('exports/transactions.csv', TransactionExportController::class)->middleware('abilities:exports:read')->name('exports.transactions');
         });
     });
 });

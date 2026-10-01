@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- M08 SQL reports and accounting CSV:
+  - `ReportRepository` builds every report with bound SQL and allowlisted grouping:
+    - consumption by company, vehicle or product (grouped by ID, from the stored snapshots, never repriced);
+    - top stations;
+    - this month's quota exceptions with reasons;
+    - tank overfills and rapid fills (`LAG()` with a 30-minute lookback before the range);
+    - a full-to-full efficiency estimate;
+    - delivery SLA from the status history.
+  - Managers are always limited to their own company.
+  - API: `GET /api/v1/reports/consumption` and `GET /api/v1/exports/transactions.csv`, both now implemented in `openapi.json`. The CSV uses the transaction list's filters, streams in keyset chunks inside one snapshot, quotes cells and neutralizes spreadsheet formulas.
+  - Screens: six report pages under `/reports` and the same CSV as a browser download.
+  - New index `fuel_transactions (transacted_at, id)`, justified by measured query plans (docs/REPORT-QUERY-PLANS.md), and `php artisan reports:explain`.
+  - Tests: T29–T33, with cross-tenant checks on every report and the export, and totals cross-checked between the reports, the ledger list and the CSV.
+  - Postman folder 04: reports and CSV agree with the ledger; signs in and out on its own.
 - M07 diesel delivery workflow:
   - `DeliveryOrderService`: pending → scheduled → out for delivery → delivered, with cancellation from any open status.
     - Each change locks the order, checks the role, the caller's `expected_status` (409 `stale_state`) and the state machine (409 `invalid_transition`), then writes one history row and one audit row in the same transaction.

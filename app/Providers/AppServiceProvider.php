@@ -28,6 +28,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -94,6 +95,20 @@ class AppServiceProvider extends ServiceProvider
         $this->configureAuthentication();
         $this->configureRateLimiting();
         $this->bindTenantScopedModels();
+        $this->defineReportGates();
+    }
+
+    /**
+     * Reports and the accounting CSV: active admins (every company) and
+     * company managers (their own, see ReportScope). Station operators see
+     * their purchases on the station page and the ledger API instead.
+     */
+    private function defineReportGates(): void
+    {
+        $reportReader = fn (User $user): bool => $user->is_active && ($user->isAdmin() || $user->isCompanyManager());
+
+        Gate::define('viewReports', $reportReader);
+        Gate::define('exportTransactions', $reportReader);
     }
 
     /**

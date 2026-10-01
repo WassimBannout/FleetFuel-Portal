@@ -43,16 +43,7 @@ class TransactionController extends Controller
      */
     public function index(ListTransactionsRequest $request): JsonResponse
     {
-        [$from, $to] = $request->utcRange();
-
-        $query = FuelTransaction::query()
-            ->visibleTo($this->user($request))
-            ->where('transacted_at', '>=', $from)
-            ->where('transacted_at', '<', $to)
-            ->when($request->validated('card'), fn ($q, $card) => $q->whereHas('fuelCard', fn ($c) => $c->where('card_no', strtoupper((string) $card))))
-            ->when($request->validated('station_id'), fn ($q, $station) => $q->where('station_id', (int) $station))
-            ->when($request->validated('company_id'), fn ($q, $company) => $q->where('company_id', (int) $company))
-            ->when($request->validated('product_code'), fn ($q, $code) => $q->whereHas('product', fn ($p) => $p->where('code', $code)));
+        $query = $request->transactionFilters()->apply(FuelTransaction::query()->visibleTo($this->user($request)));
 
         $totals = (clone $query)->toBase()
             ->selectRaw('SUM(liters) AS liters, SUM(amount_lbp) AS amount_lbp, SUM(amount_usd) AS amount_usd')

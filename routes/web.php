@@ -8,9 +8,11 @@ use App\Http\Controllers\Web\ExchangeRateController;
 use App\Http\Controllers\Web\FuelCardController;
 use App\Http\Controllers\Web\ProductController;
 use App\Http\Controllers\Web\ProductPriceController;
+use App\Http\Controllers\Web\ReportController;
 use App\Http\Controllers\Web\StationController;
 use App\Http\Controllers\Web\StationHomeController;
 use App\Http\Controllers\Web\TransactionController;
+use App\Http\Controllers\Web\TransactionExportController;
 use App\Http\Controllers\Web\VehicleController;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Http\Controllers\AuthenticatedSessionController;
@@ -88,5 +90,19 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::resource('deliveries', DeliveryOrderController::class)->only(['index', 'create', 'store', 'show']);
         Route::get('/deliveries/{delivery}/panel', [DeliveryOrderController::class, 'panel'])->name('deliveries.panel');
         Route::patch('/deliveries/{delivery}/status', [DeliveryOrderController::class, 'updateStatus'])->name('deliveries.status');
+
+        // Reports read ReportRepository through ReportScope, which pins a
+        // manager to their own company. The CSV is the API's file, served
+        // to the browser session.
+        Route::redirect('/reports', '/reports/consumption')->name('reports.index');
+        Route::prefix('reports')->name('reports.')->controller(ReportController::class)->group(function () {
+            Route::get('/consumption', 'consumption')->name('consumption');
+            Route::get('/top-stations', 'topStations')->name('top-stations');
+            Route::get('/quota-exceptions', 'quotaExceptions')->name('quota-exceptions');
+            Route::get('/anomalies', 'anomalies')->name('anomalies');
+            Route::get('/efficiency', 'efficiency')->name('efficiency');
+            Route::get('/delivery-sla', 'deliverySla')->name('delivery-sla');
+        });
+        Route::get('/exports/transactions.csv', TransactionExportController::class)->name('exports.transactions');
     });
 });

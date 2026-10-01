@@ -56,7 +56,19 @@ trait ChecksOpenApiContract
             return $response;
         }
 
-        $this->assertStringStartsWith('application/json', (string) $response->headers->get('Content-Type'));
+        // A non-JSON body (the CSV export) is checked by its media type only.
+        $mediaTypes = array_keys((array) $documented->content);
+        $contentType = (string) $response->headers->get('Content-Type');
+        if (! in_array('application/json', $mediaTypes, true)) {
+            $this->assertNotEmpty(
+                array_filter($mediaTypes, fn (string $type): bool => str_starts_with($contentType, $type)),
+                "HTTP {$status} of {$method} {$path} must be one of ".implode(', ', $mediaTypes).", not {$contentType}.",
+            );
+
+            return $response;
+        }
+
+        $this->assertStringStartsWith('application/json', $contentType);
 
         $pointer = '#/paths/'.$this->jsonPointerSegment($path)."/{$method}/responses/{$status}/content/application~1json/schema";
         $body = json_decode((string) $response->getContent(), false, 512, JSON_THROW_ON_ERROR);

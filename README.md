@@ -2,7 +2,7 @@
 
 A Laravel/MySQL portfolio application, in progress, for corporate fuel cards, station POS transactions, diesel deliveries, and USD/LBP reports. All companies, people and prices are fictional.
 
-**Current status: M07 diesel deliveries done.** The Docker stack runs locally, with the constrained database schema and a deterministic demo seed. Sign-in, roles and company/station isolation work, and API tokens can be issued and revoked. Admins manage companies, stations and products; admins and managers manage vehicles, drivers and fuel cards, with audited quota and block controls. Admins publish LBP prices on an append-only timeline and monitor USD/LBP rates, which a daily `rates:sync` stores with bounded fallback and audited manual overrides. Stations submit fuel purchases through the API, where retries are safe and quotas hold under concurrent use. The API also serves stations, prices, card quota and block changes, vehicles and drivers; its OpenAPI contract is validated against the real responses. A standalone POS simulator and a Postman collection exercise it end to end. Managers request diesel deliveries, and admins schedule, dispatch and deliver them, with an audited status timeline that concurrent clicks cannot corrupt. Reports come in M08. See [docs/PROGRESS.md](docs/PROGRESS.md).
+**Current status: M08 reports and exports done.** The Docker stack runs locally, with the constrained database schema and a deterministic demo seed. Sign-in, roles and company/station isolation work, and API tokens can be issued and revoked. Admins manage companies, stations and products; admins and managers manage vehicles, drivers and fuel cards, with audited quota and block controls. Admins publish LBP prices on an append-only timeline and monitor USD/LBP rates, which a daily `rates:sync` stores with bounded fallback and audited manual overrides. Stations submit fuel purchases through the API, where retries are safe and quotas hold under concurrent use. The API also serves stations, prices, card quota and block changes, vehicles and drivers; its OpenAPI contract is validated against the real responses. A standalone POS simulator and a Postman collection exercise it end to end. Managers request diesel deliveries, and admins schedule, dispatch and deliver them, with an audited status timeline that concurrent clicks cannot corrupt. Reports cover consumption, top stations, quota exceptions, anomalies, a fuel-efficiency estimate and delivery times, with a scoped accounting CSV. The dashboard and UI finish come in M09. See [docs/PROGRESS.md](docs/PROGRESS.md).
 
 Start with [START_HERE.md](START_HERE.md) to continue the build in Claude Code. It contains the milestone order and resume instructions.
 
@@ -117,6 +117,16 @@ Open **Deliveries** in the navigation bar (admins and managers). Times are Beiru
 - The buttons update the page in place. Each one sends the status the page showed; if someone else changed the order in the meantime, the change is refused and the page reloads the order with an explanation. Try it with the same order open in two tabs.
 - The API offers the same through `/api/v1/delivery-orders` (below).
 
+## Reports and the accounting CSV
+
+Open **Reports** in the navigation bar (admins and managers). Each report has a date filter in Beirut days (default: this month); admins can also pick one company. Managers always see their own company only.
+
+- **Consumption** by company, vehicle or product, with totals. Every figure is the sum of what each purchase stored; nothing is repriced with today's price or rate.
+- **Top stations** by liters, **quota exceptions** this month with the reason, **anomalies** (more than the tank holds, refills within 30 minutes), a **fuel-efficiency estimate**, and **delivery time** by governorate.
+- **Download CSV** on the consumption page exports every matching purchase. Its totals match the table.
+
+From the command line, `docker compose exec app php artisan reports:explain` prints the database's query plans for these reports (read-only; see [docs/REPORT-QUERY-PLANS.md](docs/REPORT-QUERY-PLANS.md)).
+
 ## Other API endpoints, simulator and Postman
 
 The full contract is [docs/api/openapi.json](docs/api/openapi.json) (OpenAPI 3.1). The tests validate it against the official schema, compare its routes, token abilities and roles with the real routes, and check real responses against it. [docs/05-API-CONTRACT.md](docs/05-API-CONTRACT.md) explains the rules in prose.
@@ -128,6 +138,8 @@ The full contract is [docs/api/openapi.json](docs/api/openapi.json) (OpenAPI 3.1
 | `PATCH /api/v1/cards/{id}` | admin, own company's manager | Any of `monthly_limit_l`, `monthly_limit_usd` (decimal strings, `null` = unlimited) and `status` (`active`/`blocked`), applied together and audited |
 | `GET`, `POST /api/v1/vehicles` and `/api/v1/drivers` | admin, own company's manager | Tenant-scoped lists; creation in your own company (admins must send `company_id`) |
 | `GET`, `POST /api/v1/delivery-orders`, `GET /api/v1/delivery-orders/{id}` | admin, own company's manager | Orders with their history; a new order starts `pending` |
+| `GET /api/v1/reports/consumption?group_by=` | admin, own company's manager | Liters and stored LBP/USD per `company` (default), `vehicle` or `product`, for `from`/`to` (Beirut dates, default this month) |
+| `GET /api/v1/exports/transactions.csv` | admin, own company's manager | The accounting CSV: every purchase matching the transaction filters, streamed, formula-safe |
 | `PATCH /api/v1/delivery-orders/{id}/status` | admin; own company's manager for cancelling a pending order | `expected_status` and `status`, plus the window and `assigned_truck` to schedule or a `reason` to cancel. 409 `stale_state` if the order changed meanwhile, 409 `invalid_transition` for a skipped or final step |
 
 Status codes follow one pattern: 401 no or bad token, 403 wrong role, missing token ability or a business decline, 404 not found or another company's record, 409 a conflict with the current state, 422 invalid input, 429 too many requests (with `Retry-After`), 503 no valid exchange rate.
@@ -142,7 +154,7 @@ make simulate        # success, replay, conflict, blocked and quota; exit code 0
 
 Each successful run uses 20.00 L of the card's monthly quota. For another clean run, `demo:simulator-cards` adds fresh cards and prints the variables to set. See [tools/pos-simulator/README.md](tools/pos-simulator/README.md).
 
-**Postman.** Import `postman/FleetFuel.postman_collection.json` and `postman/local.postman_environment.json`, set the demo password in your own copy of the environment, and run folders 01, 02 and 05 (POS and manager access). Folder 03, the delivery lifecycle, runs on its own and never touches a card. [postman/README.md](postman/README.md) also shows the same run with Newman from the command line.
+**Postman.** Import `postman/FleetFuel.postman_collection.json` and `postman/local.postman_environment.json`, set the demo password in your own copy of the environment, and run folders 01, 02 and 05 (POS and manager access). Folder 03 (the delivery lifecycle) and folder 04 (reports and CSV) each run on their own and never touch a card. [postman/README.md](postman/README.md) also shows the same run with Newman from the command line.
 
 ## Accounts and API tokens
 

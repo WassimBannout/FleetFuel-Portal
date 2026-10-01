@@ -2,23 +2,20 @@
 
 namespace App\Http\Requests\Api\V1;
 
-use App\Enums\ProductCode;
+use App\Http\Requests\Concerns\FiltersTransactions;
 use App\Models\FuelTransaction;
-use App\Models\User;
-use App\Support\BusinessMonth;
-use Carbon\CarbonImmutable;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 /**
  * GET /api/v1/transactions filters (docs/05-API-CONTRACT.md). Dates are
  * Beirut calendar days: `from` inclusive, `to` exclusive, at most 366 days,
  * defaulting to the current Beirut month. Only an admin may filter by
- * company; for everyone else ownership comes from the account.
+ * company; for everyone else ownership comes from the account. The CSV
+ * export uses the same filters (FiltersTransactions).
  */
 class ListTransactionsRequest extends PaginatedListRequest
 {
-    private const MAX_RANGE_DAYS = 366;
+    use FiltersTransactions;
 
     public function authorize(): bool
     {
@@ -30,16 +27,8 @@ class ListTransactionsRequest extends PaginatedListRequest
      */
     public function rules(): array
     {
-        $user = $this->user();
-
         return [
-            'from' => ['nullable', 'date_format:Y-m-d', 'required_with:to'],
-            'to' => ['nullable', 'date_format:Y-m-d', 'required_with:from', 'after:from'],
-            'card' => ['nullable', 'string', 'max:40', 'regex:/^[A-Za-z0-9-]+$/'],
-            'station_id' => ['nullable', 'integer', 'min:1'],
-            'product_code' => ['nullable', 'string', Rule::enum(ProductCode::class)],
-            // Refused for managers even when equal to their own company.
-            'company_id' => $user instanceof User && $user->isAdmin() ? ['nullable', 'integer', 'min:1'] : ['prohibited'],
+            ...$this->transactionFilterRules(),
             ...$this->paginationRules(),
         ];
     }
@@ -49,47 +38,6 @@ class ListTransactionsRequest extends PaginatedListRequest
      */
     public function after(): array
     {
-        return [
-            ...parent::after(),
-            function (Validator $validator): void {
-                $from = $this->input('from');
-                $to = $this->input('to');
-
-                if ($validator->errors()->hasAny(['from', 'to']) || ! is_string($from) || ! is_string($to)) {
-                    return;
-                }
-
-                if (CarbonImmutable::parse($from)->diffInDays(CarbonImmutable::parse($to)) > self::MAX_RANGE_DAYS) {
-                    $validator->errors()->add('to', 'The date range may cover at most '.self::MAX_RANGE_DAYS.' days.');
-                }
-            },
-        ];
-    }
-
-    /**
-     * The filter's half-open UTC range: [from, to). Each Beirut midnight is
-     * converted on its own, so daylight-saving changes are respected.
-     *
-     * @return array{CarbonImmutable, CarbonImmutable}
-     */
-    public function utcRange(): array
-    {
-        $timezone = (string) config('fleetfuel.business_timezone');
-        $from = $this->validated('from');
-        $to = $this->validated('to');
-
-        if (is_string($from) && is_string($to)) {
-            return [
-                CarbonImmutable::parse($from, $timezone)->startOfDay()->utc(),
-                CarbonImmutable::parse($to, $timezone)->startOfDay()->utc(),
-            ];
-        }
-
-        $month = BusinessMonth::for(CarbonImmutable::now());
-
-        return [
-            BusinessMonth::startUtc($month),
-            BusinessMonth::startUtc(CarbonImmutable::parse($month)->addMonthNoOverflow()->format('Y-m-d')),
-        ];
+        return [...parent::after(), $this->dateRangeLimit()];
     }
 }
