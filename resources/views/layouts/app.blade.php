@@ -28,6 +28,7 @@
                             $navUser->can('viewAny', App\Models\Vehicle::class) ? ['vehicles.index', 'Vehicles', 'vehicles.*'] : null,
                             $navUser->can('viewAny', App\Models\Driver::class) ? ['drivers.index', 'Drivers', 'drivers.*'] : null,
                             $navUser->can('viewAny', App\Models\FuelCard::class) ? ['cards.index', 'Cards', 'cards.*'] : null,
+                            $navUser->can('viewAny', App\Models\DeliveryOrder::class) ? ['deliveries.index', 'Deliveries', 'deliveries.*'] : null,
                             ['stations.index', 'Stations', 'stations.*'],
                             ['products.index', 'Products', 'products.*'],
                             $navUser->can('viewAny', App\Models\ExchangeRate::class) ? ['integrations.exchange-rates', 'Exchange rates', 'integrations.*'] : null,

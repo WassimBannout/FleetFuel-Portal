@@ -949,7 +949,93 @@
       "name": "03 — Delivery scenario (M07)",
       "item": [
         {
-          "name": "Create pending order",
+          "name": "Issue admin token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": "{{base_url}}/auth/token",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{demo_password}}\",\n  \"device_name\": \"postman-local\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "const token = pm.response.json().data.token;",
+                  "pm.test(\"Token is present\", () => pm.expect(token).to.be.a(\"string\").and.not.empty);",
+                  "pm.environment.set(\"admin_token\", token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Issue manager token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": "{{base_url}}/auth/token",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{manager_email}}\",\n  \"password\": \"{{demo_password}}\",\n  \"device_name\": \"postman-local\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "const token = pm.response.json().data.token;",
+                  "pm.test(\"Token is present\", () => pm.expect(token).to.be.a(\"string\").and.not.empty);",
+                  "pm.environment.set(\"delivery_manager_token\", token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager creates pending order",
           "request": {
             "method": "POST",
             "header": [
@@ -967,7 +1053,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{manager_token}}",
+                  "value": "{{delivery_manager_token}}",
                   "type": "string"
                 }
               ]
@@ -975,7 +1061,7 @@
             "url": "{{base_url}}/delivery-orders",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"address\": \"Fictional Warehouse, Beirut\",\n  \"governorate\": \"Beirut\",\n  \"liters\": \"500.00\",\n  \"preferred_start_at\": \"{{preferred_start}}\",\n  \"preferred_end_at\": \"{{preferred_end}}\"\n}",
+              "raw": "{\n  \"address\": \"Fictional Warehouse, Beirut (demo)\",\n  \"governorate\": \"Beirut\",\n  \"liters\": \"500.00\",\n  \"preferred_start_at\": \"{{preferred_start}}\",\n  \"preferred_end_at\": \"{{preferred_end}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -989,8 +1075,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.environment.set(\"preferred_start\", new Date(Date.now() + 86400000).toISOString().replace(/\\.\\d{3}Z$/, \"Z\"));",
-                  "pm.environment.set(\"preferred_end\", new Date(Date.now() + 90000000).toISOString().replace(/\\.\\d{3}Z$/, \"Z\"));"
+                  "const start = new Date(Date.now() + 86400000);",
+                  "const iso = (d) => d.toISOString().replace(/\\.\\d{3}Z$/, \"Z\");",
+                  "pm.environment.set(\"preferred_start\", iso(start));",
+                  "pm.environment.set(\"preferred_end\", iso(new Date(start.getTime() + 4 * 3600000)));",
+                  "pm.environment.set(\"schedule_start\", iso(new Date(start.getTime() + 3600000)));",
+                  "pm.environment.set(\"schedule_end\", iso(new Date(start.getTime() + 3 * 3600000)));"
                 ]
               }
             },
@@ -1000,15 +1090,16 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
-                  "pm.environment.set(\"delivery_id\", pm.response.json().data.id);",
-                  "pm.test(\"Pending\", () => pm.expect(pm.response.json().data.status).to.eql(\"pending\"));"
+                  "pm.test(\"Status pending\", () => pm.expect(pm.response.json().data.status).to.eql(\"pending\"));",
+                  "pm.test(\"Location header\", () => pm.expect(pm.response.headers.get(\"Location\")).to.include(\"/delivery-orders/\"));",
+                  "pm.environment.set(\"delivery_id\", pm.response.json().data.id);"
                 ]
               }
             }
           ]
         },
         {
-          "name": "Read order history",
+          "name": "Read order and initial history",
           "request": {
             "method": "GET",
             "header": [
@@ -1022,7 +1113,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{manager_token}}",
+                  "value": "{{delivery_manager_token}}",
                   "type": "string"
                 }
               ]
@@ -1035,14 +1126,16 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const history = pm.response.json().data.history;",
+                  "pm.test(\"One history row, null -> pending\", () => { pm.expect(history).to.have.length(1); pm.expect(history[0].from_status).to.eql(null); pm.expect(history[0].to_status).to.eql(\"pending\"); });"
                 ]
               }
             }
           ]
         },
         {
-          "name": "Manager cancels pending order",
+          "name": "Manager cannot schedule (403)",
           "request": {
             "method": "PATCH",
             "header": [
@@ -1060,12 +1153,497 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{manager_token}}",
+                  "value": "{{delivery_manager_token}}",
                   "type": "string"
                 }
               ]
             },
             "url": "{{base_url}}/delivery-orders/{{delivery_id}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_status\": \"pending\",\n  \"status\": \"scheduled\",\n  \"scheduled_start_at\": \"{{schedule_start}}\",\n  \"scheduled_end_at\": \"{{schedule_end}}\",\n  \"assigned_truck\": \"TRK-PM\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Error code forbidden\", () => pm.expect(pm.response.json().error.code).to.eql(\"forbidden\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin cannot skip to delivered (409)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/delivery-orders/{{delivery_id}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_status\": \"pending\",\n  \"status\": \"delivered\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", function () { pm.response.to.have.status(409); });",
+                  "pm.test(\"Error code invalid_transition\", () => pm.expect(pm.response.json().error.code).to.eql(\"invalid_transition\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin schedules order",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/delivery-orders/{{delivery_id}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_status\": \"pending\",\n  \"status\": \"scheduled\",\n  \"scheduled_start_at\": \"{{schedule_start}}\",\n  \"scheduled_end_at\": \"{{schedule_end}}\",\n  \"assigned_truck\": \"TRK-PM\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Status scheduled\", () => pm.expect(pm.response.json().data.status).to.eql(\"scheduled\"));",
+                  "pm.test(\"Truck assigned\", () => pm.expect(pm.response.json().data.assigned_truck).to.eql(\"TRK-PM\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Same request again is stale (409)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/delivery-orders/{{delivery_id}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_status\": \"pending\",\n  \"status\": \"scheduled\",\n  \"scheduled_start_at\": \"{{schedule_start}}\",\n  \"scheduled_end_at\": \"{{schedule_end}}\",\n  \"assigned_truck\": \"TRK-PM\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", function () { pm.response.to.have.status(409); });",
+                  "pm.test(\"Error code stale_state\", () => pm.expect(pm.response.json().error.code).to.eql(\"stale_state\"));",
+                  "pm.test(\"Current status reported\", () => pm.expect(pm.response.json().error.details.current_status).to.eql(\"scheduled\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager cannot cancel once scheduled (403)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{delivery_manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/delivery-orders/{{delivery_id}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_status\": \"scheduled\",\n  \"status\": \"cancelled\",\n  \"reason\": \"Postman: too late to cancel\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Error code forbidden\", () => pm.expect(pm.response.json().error.code).to.eql(\"forbidden\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin dispatches order",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/delivery-orders/{{delivery_id}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_status\": \"scheduled\",\n  \"status\": \"out_for_delivery\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Status out_for_delivery\", () => pm.expect(pm.response.json().data.status).to.eql(\"out_for_delivery\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin marks delivered",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/delivery-orders/{{delivery_id}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_status\": \"out_for_delivery\",\n  \"status\": \"delivered\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Status delivered\", () => pm.expect(pm.response.json().data.status).to.eql(\"delivered\"));",
+                  "pm.test(\"Delivery time set by the server\", () => pm.expect(pm.response.json().data.delivered_at).to.match(/Z$/));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delivered is final (409)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/delivery-orders/{{delivery_id}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_status\": \"delivered\",\n  \"status\": \"cancelled\",\n  \"reason\": \"Postman: cannot reopen\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", function () { pm.response.to.have.status(409); });",
+                  "pm.test(\"Error code invalid_transition\", () => pm.expect(pm.response.json().error.code).to.eql(\"invalid_transition\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager reads complete timeline",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{delivery_manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/delivery-orders/{{delivery_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "const steps = pm.response.json().data.history.map((step) => step.to_status);",
+                  "pm.test(\"Four steps in order\", () => pm.expect(steps).to.eql([\"pending\", \"scheduled\", \"out_for_delivery\", \"delivered\"]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager creates second order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{delivery_manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/delivery-orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address\": \"Fictional Warehouse, Beirut (demo)\",\n  \"governorate\": \"Beirut\",\n  \"liters\": \"500.00\",\n  \"preferred_start_at\": \"{{preferred_start}}\",\n  \"preferred_end_at\": \"{{preferred_end}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const start = new Date(Date.now() + 86400000);",
+                  "const iso = (d) => d.toISOString().replace(/\\.\\d{3}Z$/, \"Z\");",
+                  "pm.environment.set(\"preferred_start\", iso(start));",
+                  "pm.environment.set(\"preferred_end\", iso(new Date(start.getTime() + 4 * 3600000)));",
+                  "pm.environment.set(\"schedule_start\", iso(new Date(start.getTime() + 3600000)));",
+                  "pm.environment.set(\"schedule_end\", iso(new Date(start.getTime() + 3 * 3600000)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.environment.set(\"delivery_b_id\", pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager cancels own pending order",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{delivery_manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/delivery-orders/{{delivery_b_id}}/status",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"expected_status\": \"pending\",\n  \"status\": \"cancelled\",\n  \"reason\": \"Postman local fixture cancellation\"\n}",
@@ -1083,7 +1661,144 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
-                  "pm.test(\"Cancelled\", () => pm.expect(pm.response.json().data.status).to.eql(\"cancelled\"));"
+                  "pm.test(\"Status cancelled\", () => pm.expect(pm.response.json().data.status).to.eql(\"cancelled\"));",
+                  "pm.test(\"Reason stored\", () => pm.expect(pm.response.json().data.cancel_reason).to.eql(\"Postman local fixture cancellation\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoke admin token",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/auth/token"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoked admin token rejected",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/delivery-orders"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoke manager token",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{delivery_manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/auth/token"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoked manager token rejected",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{delivery_manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{base_url}}/delivery-orders"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });"
                 ]
               }
             }

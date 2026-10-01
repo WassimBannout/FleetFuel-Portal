@@ -260,3 +260,31 @@ These are implementation defaults chosen to make the research actionable. They a
 - Found, not changed (outside M06): the demo seed's quota-cut scenario is audited as `fuel_card.limits_changed`, while `FuelCardService` writes `card.limits_changed`. The audit history therefore shows two spellings. Left for the M10 review; changing it would also change seeded history.
 
 Template: date, affected decision, old/new behavior, reason, spec/test updates, migration implications.
+
+2026-10-01 (M07): diesel delivery workflow. No product rule changed. The API contract gained an "Implemented behavior (M07)" section; the points below fill in details the specs leave open.
+
+- `DeliveryOrderService` is the only writer of orders, for the web screens, the API and the demo seed. A status change locks the order row, then checks, in order:
+  1. the role, through the new `DeliveryOrderPolicy::transition()` (403);
+  2. `expected_status` (409 `stale_state`);
+  3. the state machine (409 `invalid_transition`);
+  4. the details (422).
+
+  Only then does it write the order, one history row and one audit row, in one transaction. The role check does not depend on the current status, so a manager whose pending order was scheduled meanwhile gets 409 `stale_state` and a reload, not 403.
+- Audit: transitions are audited as `delivery_order.status_changed`, with `old_values` `{status}` and `new_values` `{status, …fields set}`. That is the action name and value shape the M01 seed already used, so seeded and live history read the same. Creation is not audited: its first history row records who and when (T26 names history for creation and audit for transitions).
+- Demo seed: `LedgerFixtureBuilder::createDelivery()` and `transitionDelivery()` now delegate to `DeliveryOrderService::createHistorical()` and `transitionHistorical()`. These apply the same rules, judged at the given time and without an expected status. Refusals keep the builder's `LogicException` form, with the error code. Seeded history is unchanged: the seeder and builder tests pass as before. The builder's unused `$note` parameter was removed. `AuditService::record()` gained an optional time, for seeded history only.
+- Windows: the preferred and scheduled windows must start strictly after now and at most 366 days ahead, and end after their start. The horizon is not in the specs; it matches the other 366-day limits and keeps year-9999 dates out. The scheduled window need not match the preferred one: distributor staff decide.
+- Inactive company: no new orders. An admin can only pick active companies (422); an inactive company's own manager gets 403 `company_inactive`. Open orders can still be moved on or cancelled, so nothing gets stuck.
+- API abilities: the status route uses Sanctum's any-of `ability:deliveries:status,deliveries:write` middleware, and the Form Request requires the ability that matches the role. `openapi.json` documents this as `x-any-abilities`, and the route-parity test now reads `ability:` middleware too.
+- API shape: a 201 carries `Location`, as for purchases. Lists include each order's history, eager-loaded, because the documented `Delivery` schema requires it. Lists are newest first.
+- Governorate: free text up to 80 characters, like stations. The form suggests Lebanon's nine governorates. M08's SLA report will group by the stored value.
+- Web screens:
+  - The order page's status forms are ordinary PATCH forms, so they work without JavaScript: they redirect, and a refused rule shows as the page's alert.
+  - `resources/js/delivery-actions.js` sends them with jQuery (CSRF header, the form's `expected_status`) and disables the button while the request runs.
+  - After a success or a 409, it reloads the server-rendered panel (`GET /deliveries/{id}/panel`) instead of patching the page in JavaScript. On 422 it marks the fields. Messages are inserted as text.
+  - `BusinessRuleViolation` now answers web requests that ask for JSON with `{message, code, details}`; before M07, no page used AJAX. It also gained optional `details`, used for `current_status`.
+- Tests:
+  - The generic worker helpers moved from `PosConcurrencyTest` into `tests/Concerns/RunsConcurrentWorkers.php`. Its 12 tests pass unchanged.
+  - T28 runs real HTTP requests in separate processes (`tests/Concurrency/delivery-worker.php`).
+- Checking the JavaScript: there is no JavaScript test framework in the MVP. The module was run once in jsdom against the live app (real sessions and CSRF, password from the environment); the harness is not committed. That is not a real browser, and visual and keyboard checks are M09.
+- Postman folder 03 is self-contained. It issues its own manager and admin tokens (`delivery_manager_token`, `admin_token`) and revokes both at the end, so it runs alone without making a purchase, and does not interfere with folders 02 and 05.
+

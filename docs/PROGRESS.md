@@ -1,57 +1,45 @@
 # Progress and session handoff
 
-Updated: 2026-09-30
+Updated: 2026-10-01
 
 ## Current state
 
-- **M06 API completeness and POS simulator is DONE and verified locally on MySQL 8.4**, on top of M00–M05.
-  - New endpoints:
-    - `GET /api/v1/stations` and `GET /api/v1/products/prices?at=` (every role, `reference:read`);
-    - `PATCH /api/v1/cards/{id}` (admin and own manager, `cards:write`; limits and block/unblock under the card lock, atomic, audited);
-    - `GET`/`POST` `/api/v1/vehicles` and `/api/v1/drivers` (admin and own manager, `fleet:read`/`fleet:write`; the server chooses the company).
-  - `tools/pos-simulator`: a standalone PHP/Guzzle CLI (`make simulate`).
-    - Scenarios success, replay, conflict, blocked, quota and all; each checks the HTTP answer plus the balance and ledger before and after.
-    - Credentials come from environment variables only. Exit codes 0/1/2.
-  - `php artisan demo:simulator-cards [--tag=]` adds fresh dedicated simulator cards without resetting anything.
-  - `docs/api/openapi.json`:
-    - valid against the official OpenAPI 3.1 schema;
-    - its routes, token abilities and roles match the real routes;
-    - real responses are validated against it in the tests;
-    - delivery and report operations are marked `planned`.
-  - The Postman collection was updated. Folders 01, 02 and 05 ran green with Newman 6 on fresh cards.
-- Dev database: the M01 demo, the M03 walkthrough records, the M04 rate rows and M05's transaction 33, plus from M06:
-  - 9 cards from `demo:simulator-cards` (tags `M06`, `PM1`, `PM2`: `FF-SIM-<tag>-MAIN`/`-BLOCKED`/`-TINY`), each with a `card.created` audit row;
-  - 3 purchases of 20.00 L:
-    - 34, the simulator run on `FF-SIM-M06-MAIN`;
-    - 35, Newman run 1 on `FF-SIM-PM1-MAIN`;
-    - 36, Newman run 2 on `FF-SIM-PM2-MAIN`.
-  - Every token the simulator and Newman issued was revoked (none left with those device names).
+- **M07 diesel delivery workflow is DONE and verified locally on MySQL 8.4**, on top of M00–M06.
+  - `DeliveryOrderService` writes every order change, for the web screens, the API and the demo seed:
+    - pending → scheduled → out_for_delivery → delivered, and cancellation from any open status;
+    - the order row is locked, then the role, `expected_status` (409 `stale_state`) and the state machine (409 `invalid_transition`) are checked;
+    - one history row and one audit row are written in the same transaction.
+  - Managers request orders for their own company and may only cancel their own pending ones. Only admins schedule (future window plus truck), dispatch and deliver. Deliveries never touch fuel cards, quotas or the ledger.
+  - API: `GET`/`POST /api/v1/delivery-orders`, `GET /api/v1/delivery-orders/{id}`, `PATCH /api/v1/delivery-orders/{id}/status`. They are marked `implemented` in `openapi.json` (0.7.0) and checked against real responses; the status route's any-of token ability is checked too.
+  - Screens: **Deliveries** in the navigation bar.
+    - A list with search, status and (admin) company filters.
+    - A request form; admins pick the company first.
+    - An order page with details, timeline, admin audit rows and the permitted next steps. The status buttons are sent with jQuery (CSRF header, `expected_status`) and reload the server-rendered panel after a success or a 409; they still work as plain forms without JavaScript.
+  - Postman folder 03 is enabled and self-contained: its own manager and admin tokens, revoked at the end.
+- Dev database: everything listed for M06, plus four delivery orders from M07's live checks, all for Atlas Logistics with fictional addresses:
+  - 7, delivered (Newman, truck `TRK-PM`);
+  - 8, cancelled by its manager (Newman);
+  - 9 and 10, delivered (jsdom UI check, truck `TRK-UI`).
 
-  The seeded simulator cards `FF-ATLAS-001`, `FF-ATLAS-BLOCKED` and `FF-ATLAS-TINY` are still unused. `usage:reconcile` reports every counter matching.
-- The test MySQL server now also holds `fleetfuel_test_integration`, created by the new Integration suite. It is covered by the existing test-user grant (`fleetfuel\_test%`).
-- Not built yet: deliveries (M07), reports and CSV export (M08), UI polish (M09).
-- Local URL: <http://localhost:8080> (sign-in `/login`, readiness `/health`, liveness `/up`, API base `/api/v1`).
+  Seeded orders 1–6 are unchanged. Purchases are still 36 and `usage:reconcile` matches. No `postman-local` tokens are left.
+- Not built yet: reports and CSV export (M08), UI polish (M09).
+- Local URL: <http://localhost:8080> (sign-in `/login`, deliveries `/deliveries`, readiness `/health`, liveness `/up`, API base `/api/v1`).
 - Git: branch `main` tracks `origin/main` (github.com/WassimBannout/FleetFuel-Portal).
-  - M05 is `a9bbcc5`. GitHub Actions run 36608901328 passed on it: Pint PASS on 230 files, Larastan OK, 441 tests / 3355 assertions (59.10 s), npm 0 vulnerabilities, Vite build OK, and the repeated-setup step passed.
-  - M06 is committed and pushed in the commit that contains this file. Its CI result had not been observed when this file was written.
+  - M06 is `a59210f`. GitHub Actions run 36734519806 passed on it: Pint PASS on 268 files, Larastan OK twice, 481 tests / 4242 assertions (95.80 s), npm 0 vulnerabilities, Vite build OK, and the repeated-setup step passed.
+  - M07 is committed and pushed in the commit that contains this file. Its CI result had not been observed when this file was written.
 
 ## Next action
 
-Execute `prompts/07-delivery-orders.md` (M07):
-- the scoped delivery API (`GET`/`POST /delivery-orders`, `GET /delivery-orders/{id}`, `PATCH /delivery-orders/{id}/status`) and the Blade UI;
-- a state service with the `expected_status` check;
-- history and audit written atomically;
-- the concurrent-transition test (T26–T28).
+Execute `prompts/08-reports-exports.md` (M08): the SQL reports, `GET /api/v1/reports/consumption` and the CSV export `GET /api/v1/exports/transactions.csv` (T29–T33).
 
-Starting points from M06:
+Starting points from M07:
 
-- **Route parity:** the four delivery operations are in `openapi.json` with `x-status: planned`. Switching them to `implemented` makes `OpenApiContractTest` require routes whose `abilities:` and `role:` middleware match `x-abilities` and `x-roles` exactly.
-  - The status transition needs "admin with `deliveries:status`, or own manager with `deliveries:write` for cancellation only". Decide how to express that, for example the `ability:` (any-of) middleware plus a policy, and extend the parity check to read it.
-- **Reuse:**
-  - `RespondsWithPages`, `PaginatedListRequest`/`ListCompanyRecordsRequest`, `ChecksOpenApiContract` and `CallsApi` for the API and its tests;
-  - `UsesCommittedDatabase` and the worker pattern in `tests/Concurrency` for T28.
-- **Binding:** add a tenant-scoped route binding for the order in `AppServiceProvider::bindTenantScopedModels()`, as for `card`.
-- **Postman:** folder 03 already exists; enable it and add it to the Newman run (postman/README.md).
+- **Delivery SLA (T33):** measure from the initial pending history row (`from_status` null) to the delivered row, both in `delivery_status_history`, and group by the stored `governorate` (free text; the form only suggests names). Cancelled and pending orders are excluded.
+  - On the demo seed, orders 1 (Atlas, Beirut: 74 h from request to delivery) and 2 (Cedar, Mount Lebanon: 51 h) are delivered.
+  - The dev database also has delivered orders 7, 9 and 10, created and delivered minutes apart.
+- **Route parity:** the two report/export operations are still `x-status: planned`. Switching them to `implemented` makes `OpenApiContractTest` require matching routes; `x-any-abilities` exists if a route ever needs one of several abilities.
+- **Reuse:** `RespondsWithPages`, `PaginatedListRequest`/`ListCompanyRecordsRequest`, `ChecksOpenApiContract`, `CallsApi`, `FiltersLists` for the screens, and `RunsConcurrentWorkers` if a report test needs real concurrency.
+- **Postman:** folder 04 exists but is not built; folder 03 shows how to make a folder self-contained (its own tokens, revoked at the end).
 
 ## Milestone ledger
 
@@ -64,7 +52,7 @@ Starting points from M06:
 | M04 Pricing/FX | DONE | T09–T12 (ledger-immutability part of T10/T12 completes in M05) on MySQL with faked HTTP: exact 20 L sample (1600000.00 LBP / 17.88 USD), half-up edges, overflow/excess-scale inputs, exact price boundary, missing price 422, manual > provider/fixture precedence, expired/missing rate 503, live ignores fixtures, success/schema/timeout/5xx/429 with bounded attempts, deduplicated observations. One live sync run, labeled. `make verify`: 349 tests, 2800 assertions |
 | M05 POS ingestion | DONE | On MySQL through the real HTTP stack: T13–T19, T23 and the ledger parts of T10/T12. T20–T22 use genuinely overlapping PHP processes, each with its own connection, on a dedicated database: no double spend at the quota edge (80 + 15 + 15 of 100 L; 6 × 20 L of 100 L), one purchase per identical concurrent retry, one winner + 409 for a conflicting or cross-card shared reference (settled by the unique index), and card edits serialized with ingestion in both orders. Live walkthrough through nginx. `make verify`: 441 tests, 3355 assertions |
 | M06 API/tooling | DONE | T24 on MySQL: `openapi.json` valid against the official OpenAPI 3.1 schema (a broken copy fails with exactly the injected errors); routes, abilities and roles match it and planned operations are unrouted; every response in the API tests is validated against the documented status, headers and schema, including 400/401/403/404/409/422/429 (with `Retry-After`)/503. T25: the simulator's five scenarios over real HTTP on fresh cards (Integration suite, and live through nginx: ledger +1); Postman folders 01/02/05 with Newman 6: 26 requests, 51 assertions, 0 failures (ledger +1). `make verify`: 481 tests, 4242 assertions |
-| M07 Deliveries | TODO | Depends on M06 |
+| M07 Deliveries | DONE | T26–T28 on MySQL. Creation writes the initial history. Each accepted change writes exactly one history row and one audit row, and both roll back with the order when either write is forced to fail. Skipped, repeated, stale and final-status changes and manager escalation are refused with nothing written. Token abilities are checked per role; another company's order is 404. T28: separate PHP processes through the real HTTP kernel; two admins, or an admin and a manager, from the same expected status give one 200 and one 409 `stale_state`; the commit and rollback orderings are covered too. Live: Postman folder 03 with Newman (19 requests, 38 assertions, 0 failures) and the real jQuery module in jsdom through nginx (12/12). `make verify`: 508 tests, 4937 assertions |
 | M08 Reporting | TODO | Depends on M07 |
 | M09 UI polish | TODO | Depends on M08 |
 | M10 Release quality | TODO | Depends on M09 |
@@ -73,7 +61,137 @@ Starting points from M06:
 
 Use TODO / IN PROGRESS / DONE / BLOCKED. A milestone is DONE only when its checks pass. If an external prerequisite blocks one part, record exactly which part and finish independent local work.
 
-## Most recent session: M06
+## Most recent session: M07
+
+**Date / milestone:** 2026-09-30 to 2026-10-01, M07 diesel delivery workflow.
+
+**Goal and actual state:**
+- Goal (prompts/07-delivery-orders.md):
+  - scoped orders, the lifecycle service and the `expected_status` check;
+  - the scheduling and truck requirements and the cancellation rules;
+  - atomic history and audit, and the Bootstrap/AJAX screens;
+  - fulfillment never debits a fuel card.
+
+  Demonstrate pending → scheduled → out_for_delivery → delivered, a manager cancellation, refused skip/stale/final changes, and run the concurrent-transition test (T26–T28).
+- Result: done, and all local gates pass on MySQL.
+- M06 had nothing outstanding: the tree was clean, `main` matched `origin/main` at `a59210f`, and GitHub CI run 36734519806 had passed on it.
+
+### What was built
+
+- **Service:** `app/Services/DeliveryOrderService.php`:
+  - `create()` and `transition()`, plus `createHistorical()` and `transitionHistorical()` for the demo seed (same rules, judged at a given time);
+  - `HORIZON_DAYS = 366`.
+
+  Supporting changes:
+  - `DeliveryOrderPolicy::transition()`;
+  - `DeliveryStatus::label()`;
+  - delivery refusals in `BusinessRuleViolation` (`staleDeliveryState`, `invalidDeliveryTransition`, `deliveryTransitionForbidden`, `deliveryCompanyInactive`), which gained optional `details`;
+  - `AuditService::record()` gained an optional time.
+- **Seed:** `LedgerFixtureBuilder::createDelivery()`/`transitionDelivery()` now delegate to the service. `DemoSeeder` is unchanged, and seeded history is unchanged.
+- **API:**
+  - `Api\V1\DeliveryOrderController` (index, store with `Location`, show, updateStatus);
+  - `ListDeliveryOrdersRequest`, `StoreDeliveryOrderRequest` and `TransitionDeliveryRequest`, extending the web requests with unknown-field refusal, offset timestamps and the per-role token ability;
+  - `DeliveryOrderResource` and `DeliveryHistoryResource`;
+  - four routes in `routes/api.php`; the status route uses `ability:deliveries:status,deliveries:write`;
+  - the tenant-scoped `{delivery}` binding in `AppServiceProvider`.
+- **Web:**
+  - `Web\DeliveryOrderController` (index, create, store, show, panel, updateStatus) and six routes;
+  - `Requests\Deliveries\{StoreDeliveryOrderRequest, TransitionDeliveryRequest}`;
+  - views `deliveries/{index, choose-company, form, show, _panel}` and `partials/delivery-status-badge`, plus the nav link;
+  - `resources/js/delivery-actions.js`, imported by `app.js`;
+  - `bootstrap/app.php`: business-rule refusals now return JSON to web requests that ask for it.
+- **Contract:** `docs/api/openapi.json` 0.7.0. The four delivery operations are `implemented` with descriptions. The status route has `x-any-abilities`, and the 201 a `Location` header.
+- **Tests (27 new, 1 changed):**
+  - `tests/Feature/Api/DeliveryApiTest` (8);
+  - `tests/Feature/Deliveries/{DeliveryOrderServiceTest 4, DeliveryScreensTest 10}`;
+  - `tests/Concurrency/DeliveryConcurrencyTest` (4) with `tests/Concurrency/delivery-worker.php`;
+  - one new `DeliveryStatusTest` case.
+  - `OpenApiContractTest`'s route parity now reads `ability:` middleware, and the planned list is down to the two M08 operations.
+  - The worker helpers moved from `PosConcurrencyTest` into `tests/Concerns/RunsConcurrentWorkers.php`; its behavior is unchanged.
+- **Postman:** folder 03 rebuilt (19 requests). The environment template gained `admin_email`, `admin_token`, `delivery_manager_token`, `delivery_b_id`, `schedule_start` and `schedule_end`; the token fields are blank.
+- **Docs:**
+  - `docs/05-API-CONTRACT.md` ("Implemented behavior (M07)", and the token-ability exception);
+  - `docs/DECISIONS.md` (M07 record);
+  - README ("Diesel deliveries", API table, Postman);
+  - `postman/README.md`, CHANGELOG, this file.
+
+### Checks: exact command and actual outcome
+
+All PHP commands ran as `docker compose run --rm app …` against the isolated MySQL test databases, unless stated otherwise.
+
+| Command | Outcome |
+| --- | --- |
+| `git status`, `git log`, `git rev-parse HEAD origin/main`, `gh run list` at the start | Clean tree; both at `a59210f`; run 36734519806 success |
+| `php artisan test tests/Feature/Seeders tests/Feature/Database tests/Unit/Enums`, after the builder started delegating | 69 passed / 843 assertions: the seed through the service produces the same history |
+| `php artisan route:list --path=deliver` | 10 routes (4 API, 6 web) |
+| Larastan and Pint after the HTTP layer | `[OK] No errors`; Pint PASS on 278 files |
+| `DeliveryApiTest` + `OpenApiContractTest`, first run | **1 failed, 14 passed.** A mistake in my test: the lifecycle test jumped two days ahead with a 24-hour token, so the 401 was right (the same slip as in M06). Each later step now signs in again. Then 8 passed / 538 assertions |
+| `DeliveryOrderServiceTest` | 4 passed / 19 assertions on the first run |
+| `tests/Feature/Deliveries` | 14 passed / 131 assertions. Before the first run I fixed a guessed manager name in an assertion and put the timeline line on one line, so text matching works |
+| `php artisan test --testsuite=Concurrency`, after extracting `RunsConcurrentWorkers` | 16 passed / 71 assertions: the 4 new T28 tests and the 12 M05 tests |
+| Negative checks (each file mutated, suite run, file restored and checksum-verified) | All 10 caught; see the list below this table |
+| Larastan on the new tests | 8 errors, all redundant `?->` after PHPUnit's type narrowing in my tests; fixed, then no errors. Pint PASS on 284 files |
+| `docker compose restart app`, then **Newman folder 03** (`npx --yes newman@6 … --folder "03 — Delivery scenario (M07)"` in the node container, through nginx, password in an environment variable) | **19 requests, 38 assertions, 0 failures** on the first run. Order 7: created, manager schedule 403, skip 409 `invalid_transition`, scheduled, repeat 409 `stale_state` (`current_status` scheduled), manager cancel 403, dispatched, delivered, cancel 409 `invalid_transition`, four-step timeline. Order 8: cancelled by its manager. Both tokens revoked (204, then 401). Dev database: orders 6 → 8, history 16 → 22, audit 26 → 30, purchases 36 → 36, 0 `postman-local` tokens; `usage:reconcile`: "All monthly usage counters match the ledger." |
+| **jsdom UI check** (one-off harness, not committed): jsdom 26 installed in the node container's `/tmp`. It signed in through `/login` with real sessions and CSRF tokens, the password read from an environment variable. It ran the real `delivery-actions.js` and jQuery in pages loaded from nginx | **12/12 checks.** Manager form post creates order 9; manager sees only the cancel form; the button is disabled while the request runs; an empty reason comes back as a 422 field error and the button is re-enabled; admin schedules and the panel reloads; the reloaded dispatch form sends `expected_status=scheduled`; dispatch; a second, stale tab gets the 409 message and its panel reloads to the current status; deliver leaves no forms; the timeline shows four steps. Both sessions signed out |
+| Message fix, then tests and jsdom again | The stale message read "Reload it and try again. The order has been reloaded." on the page; reworded for both API and page. `tests/Feature/Deliveries` + `DeliveryApiTest`: 22 passed / 669 assertions. jsdom on order 10: 12/12. Orders 9 and 10 each have 4 history rows and 3 audit rows: the stale clicks wrote nothing |
+| `make verify` #1 | **exit 2: 507 passed, 1 failed.** `IntegrationStatusScreenTest` (M04, untouched) failed in setup: `demo:seed` exited 1. `journalctl` shows the laptop suspended from 00:40:06 to 11:21:07 (38,461 s); that test's reported duration was 38,459.85 s. Rerun alone: 17 passed / 114 assertions. The likely cause is MySQL dropping the idle connection after its 8-hour `wait_timeout` during the suspend; not proven, since the log does not show the exception |
+| `make verify` #2 | exit 0: Pint PASS on 284 files, Larastan `[OK] No errors`, simulator PHPStan `[OK] No errors`, **508 tests / 4937 assertions** (488.61 s, on battery while a VM and a browser were running), npm 0 vulnerabilities, Vite build OK |
+| `sh docker/bin/check-setup-preserves-state.sh` | PASS: repeated setup kept APP_KEY, credentials and database rows |
+| `curl` smoke test through nginx | `/deliveries` as a guest: 302 to `/login`; `/api/v1/delivery-orders` without a token: 401; the built bundle contains the delivery handler |
+
+Negative checks:
+- **N1**, the order row lock removed. With the test's barrier switched to a generic "blocked for 1 s" wait, so the workers race instead of failing at the barrier: both admins got 200 (`[200, 200]`, not `[200, 409]`). The lost update is real without the lock.
+- **N2**, the `expected_status` check removed: the API stale case failed, and so did 3 of the 4 T28 tests.
+- **N3**, the transaction around a status change replaced with `call_user_func`: both forced-failure rollback tests failed.
+- **N4**, the policy letting a manager ask for any move: the manager-escalation test failed (200, not 403).
+- **N5**, the per-role token ability check removed from the API request: the abilities test failed (an admin token without `deliveries:status` scheduled an order).
+- **N6**, the `ability:` middleware removed from the status route: the route-parity test failed.
+- **N7**, the panel always sending `expected_status=pending`: the panel-reload test failed.
+- **N8**, the "window starts in the future" check removed: 4 tests failed (API create and transition validation, web create, web field errors).
+- **N9**, the JSON branch for web refusals removed: the stale-button test failed (302, not 409).
+- **N10**, the tenant-scoped `{delivery}` binding removed: 2 tests failed (403, not 404, for another company's order).
+
+### Not run or not verified
+
+- GitHub CI for the M07 commit (reported in the session reply after the push).
+- A real browser: the jQuery module ran in jsdom, which has no layout, focus or visual rendering. Visual, keyboard and mobile checks are M09.
+- The Postman desktop app: folder 03 ran with Newman 6.
+- Carried over: the 503 `temporarily_unavailable` path, the simulator with a host PHP outside Docker, SQL Server (S01).
+
+### Decisions and deviations
+
+All are in `docs/DECISIONS.md` (2026-10-01, M07):
+
+- the order of checks under the lock (role, then stale, then transition, then details);
+- the audit name and shape matching the seed, and no audit row on creation;
+- the seed delegating to the service;
+- the 366-day window horizon and strictly future windows;
+- the inactive-company rule;
+- any-of token abilities and `x-any-abilities`;
+- `Location` on 201, and history in lists;
+- governorate as free text;
+- the AJAX design (server-rendered panel reload, form fallback, JSON refusals on web);
+- the worker-helper extraction;
+- the jsdom check;
+- the self-contained Postman folder.
+
+No product rule changed.
+
+### Remaining work and blockers
+
+None for M07.
+- Carried over: the seed audits its quota-cut scenario as `fuel_card.limits_changed` while `FuelCardService` writes `card.limits_changed` (for M10). Delivery audit names now match between the seed and the service.
+- Deliberately later: reports and CSV, including the delivery SLA (M08); visual polish and a real-browser pass (M09).
+
+**Suggested commit message:** `feat: add audited diesel delivery workflow`.
+
+**One concept to explain:** a state machine is only safe if every change is checked and written as one unit, against the state as it is right now.
+- The allowed moves are a small table (`DeliveryStatus::nextStatuses()`).
+- The client also sends the status it saw (`expected_status`). If someone else changed the order meanwhile, the server refuses (409 `stale_state`) instead of applying a decision made on old information.
+- Checking is not enough on its own: two requests could both read "pending" and both pass. So the service locks the order row first (`SELECT … FOR UPDATE`). The second request waits, then reads the new status and is refused. N1 showed both admins winning without that lock.
+- The status update, the history row and the audit row are written in one database transaction. Either the change happened and its history says so, or nothing happened (N3).
+
+## Earlier session: M06
 
 **Date / milestone:** 2026-09-30, M06 API completeness and POS simulator.
 
@@ -168,7 +286,7 @@ Negative checks:
 
 ### Not run or not verified
 
-- GitHub CI for the M06 commit (reported in the session reply after the push).
+- GitHub CI for the M06 commit was not observed when this log was written. It was checked after the push: run 36734519806 passed (481 tests / 4242 assertions).
 - The Postman desktop app itself: the collection ran with Newman 6, Postman's own command-line runner.
 - Postman folders 03 and 04 and the delivery, report and export endpoints: M07 and M08. They remain `planned` in `openapi.json`.
 - The 503 `temporarily_unavailable` path (carried over from M05): no deadlock or lock timeout was provoked.

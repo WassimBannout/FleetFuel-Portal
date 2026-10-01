@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- M07 diesel delivery workflow:
+  - `DeliveryOrderService`: pending → scheduled → out for delivery → delivered, with cancellation from any open status.
+    - Each change locks the order, checks the role, the caller's `expected_status` (409 `stale_state`) and the state machine (409 `invalid_transition`), then writes one history row and one audit row in the same transaction.
+    - Managers may only cancel their own pending orders.
+    - Deliveries never touch fuel cards or quotas.
+    - The demo seed now records its deliveries through the same service.
+  - API: `GET`/`POST /api/v1/delivery-orders`, `GET /api/v1/delivery-orders/{id}` and `PATCH /api/v1/delivery-orders/{id}/status`, tenant-scoped and checked against `openapi.json`.
+  - Screens: delivery list with filters, request form (the admin picks the company), and an order page with the timeline and in-place jQuery status buttons that reload the order when it changed meanwhile. The forms also work without JavaScript.
+  - Tests: T26–T28, including concurrent status changes from separate processes on MySQL (one winner, the other 409), and rollbacks when a history or audit write fails.
+  - Postman folder 03: the full lifecycle with the refused changes; it signs in and out on its own.
 - M06 API completeness and POS simulator:
   - New endpoints:
     - `GET /api/v1/stations` (active stations, governorate filter, paginated);

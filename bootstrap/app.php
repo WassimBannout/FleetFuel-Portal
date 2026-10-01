@@ -70,11 +70,25 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (Throwable $e, Request $request) => (new ApiErrorRenderer)($e, $request));
 
         // On web pages a refused business rule (inactive company, used card,
-        // archived card, quota below usage) returns to the form with the
-        // message, like a validation error.
-        $exceptions->render(fn (BusinessRuleViolation $e, Request $request) => $request->is('api/*')
-            ? null
-            : back()->withInput()->withErrors([$e->field => $e->getMessage()]));
+        // archived card, quota below usage, a stale delivery status) returns
+        // to the form with the message, like a validation error. Page scripts
+        // that ask for JSON (the delivery status buttons) get the code and
+        // details instead, so they can react, e.g. reload on stale_state.
+        $exceptions->render(function (BusinessRuleViolation $e, Request $request) {
+            if ($request->is('api/*')) {
+                return null;
+            }
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => $e->getMessage(),
+                    'code' => $e->errorCode,
+                    'details' => (object) $e->details,
+                ], $e->status);
+            }
+
+            return back()->withInput()->withErrors([$e->field => $e->getMessage()]);
+        });
 
         // Expected API errors (invalid credentials, malformed JSON, later
         // business declines) are responses, not faults worth an error log.

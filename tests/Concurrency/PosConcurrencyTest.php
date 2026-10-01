@@ -22,8 +22,8 @@ use App\Support\PosPurchase;
 use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\File;
 use Symfony\Component\Process\Process;
+use Tests\Concerns\RunsConcurrentWorkers;
 use Tests\Concerns\SubmitsPosRequests;
 use Tests\Concerns\UsesCommittedDatabase;
 use Tests\TestCase;
@@ -44,18 +44,11 @@ use Throwable;
  */
 class PosConcurrencyTest extends TestCase
 {
+    use RunsConcurrentWorkers;
     use SubmitsPosRequests;
     use UsesCommittedDatabase;
 
     private const DATABASE = 'fleetfuel_test_concurrency';
-
-    /** Seconds to wait for workers to line up before failing, so CI never hangs. */
-    private const WAIT_SECONDS = 20;
-
-    /** @var list<Process> */
-    private array $workers = [];
-
-    private string $jobDirectory;
 
     protected function setUp(): void
     {
@@ -63,24 +56,12 @@ class PosConcurrencyTest extends TestCase
 
         $this->useCommittedDatabase(self::DATABASE);
         config(['fleetfuel.exchange_rates.mode' => 'fixture']);
-
-        $this->jobDirectory = storage_path('framework/testing/pos-workers-'.bin2hex(random_bytes(4)));
-        File::ensureDirectoryExists($this->jobDirectory);
+        $this->prepareWorkers();
     }
 
     protected function tearDown(): void
     {
-        foreach ($this->workers as $worker) {
-            if ($worker->isRunning()) {
-                $worker->stop(0);
-            }
-        }
-
-        while (DB::transactionLevel() > 0) {
-            DB::rollBack();
-        }
-
-        File::deleteDirectory($this->jobDirectory);
+        $this->stopWorkers();
 
         parent::tearDown();
     }
@@ -421,122 +402,7 @@ class PosConcurrencyTest extends TestCase
      */
     private function startWorker(array $job): Process
     {
-        $file = $this->jobDirectory.'/job-'.count($this->workers).'.json';
-        file_put_contents($file, json_encode($job, JSON_THROW_ON_ERROR));
-
-        $worker = new Process([PHP_BINARY, base_path('tests/Concurrency/pos-worker.php'), $file], base_path(), $this->childProcessEnvironment(self::DATABASE), null, 60);
-
-        $worker->start();
-
-        return $this->workers[] = $worker;
-    }
-
-    /**
-     * Wait until MySQL shows $count other connections running a statement
-     * that contains both fragments, i.e. blocked behind a lock we hold.
-     */
-    private function waitUntilWaiting(string $fragment, string $alsoContaining, int $count): void
-    {
-        $ownConnection = (int) DB::selectOne('SELECT CONNECTION_ID() AS id')->id;
-        $deadline = microtime(true) + self::WAIT_SECONDS;
-        $waiting = 0;
-
-        while (microtime(true) < $deadline) {
-            $waiting = collect(DB::select('SHOW FULL PROCESSLIST'))
-                ->filter(fn (object $row): bool => (int) $row->Id !== $ownConnection
-                    // Laravel uses server-side prepared statements, listed as "Execute".
-                    && in_array($row->Command, ['Query', 'Execute'], true)
-                    && is_string($row->Info)
-                    && str_contains(strtolower($row->Info), strtolower($fragment))
-                    && str_contains(strtolower($row->Info), strtolower($alsoContaining)))
-                ->count();
-
-            if ($waiting >= $count) {
-                return;
-            }
-
-            foreach ($this->workers as $worker) {
-                if (! $worker->isRunning()) {
-                    $this->fail("A worker finished before it reached the lock:\n".$worker->getOutput().$worker->getErrorOutput());
-                }
-            }
-
-            usleep(20_000);
-        }
-
-        $this->fail("Expected {$count} worker(s) waiting on \"{$fragment}\"; saw {$waiting} after ".self::WAIT_SECONDS.' s.');
-    }
-
-    /**
-     * Wait until $count other connections have been running one statement
-     * for at least a second: while this test holds its locks, they are
-     * blocked behind them.
-     */
-    private function waitUntilBlockedFor(int $count): void
-    {
-        $ownConnection = (int) DB::selectOne('SELECT CONNECTION_ID() AS id')->id;
-        $deadline = microtime(true) + self::WAIT_SECONDS;
-
-        while (microtime(true) < $deadline) {
-            $blocked = collect(DB::select('SHOW FULL PROCESSLIST'))
-                ->filter(fn (object $row): bool => (int) $row->Id !== $ownConnection
-                    && in_array($row->Command, ['Query', 'Execute'], true)
-                    && is_string($row->Info)
-                    && (int) $row->Time >= 1)
-                ->count();
-
-            if ($blocked >= $count) {
-                return;
-            }
-
-            usleep(100_000);
-        }
-
-        $this->fail("Expected {$count} blocked worker statement(s) within ".self::WAIT_SECONDS.' s.');
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function workerResult(Process $worker): array
-    {
-        $worker->wait();
-        $line = collect(explode("\n", $worker->getOutput()))->first(fn (string $line): bool => str_starts_with($line, 'RESULT:'));
-
-        if (! $worker->isSuccessful() || ! is_string($line)) {
-            $this->fail("Worker failed (exit {$worker->getExitCode()}):\n".$worker->getOutput().$worker->getErrorOutput());
-        }
-
-        return json_decode(substr($line, 7), true, 512, JSON_THROW_ON_ERROR);
-    }
-
-    /**
-     * @return list<array<string, mixed>>
-     */
-    private function workerResults(): array
-    {
-        return array_map(fn (Process $worker): array => $this->workerResult($worker), $this->workers);
-    }
-
-    /**
-     * @param  list<array<string, mixed>>  $results
-     * @return list<int>
-     */
-    private function statuses(array $results): array
-    {
-        $statuses = array_map(fn (array $result): int => (int) $result['status'], $results);
-        sort($statuses);
-
-        return $statuses;
-    }
-
-    /**
-     * @param  list<array<string, mixed>>  $results
-     * @return array<string, mixed>
-     */
-    private function withStatus(array $results, int $status): array
-    {
-        return collect($results)->firstOrFail(fn (array $result): bool => $result['status'] === $status);
+        return $this->startWorkerProcess('tests/Concurrency/pos-worker.php', $job, $this->childProcessEnvironment(self::DATABASE));
     }
 
     private function assertUsage(FuelCard $card, string $liters): void

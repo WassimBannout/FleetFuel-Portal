@@ -1,6 +1,9 @@
 import $ from 'jquery';
 // Enables Bootstrap's data-bs-* components (dropdowns, collapse, modals).
 import 'bootstrap';
+// Inline delivery status changes on the order page. It only registers a
+// submit handler; the CSRF header set below applies when a request is sent.
+import './delivery-actions';
 
 // Page scripts use jQuery for AJAX. Laravel rejects session-authenticated
 // writes without the CSRF token, so send it with every jQuery request.

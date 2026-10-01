@@ -14,6 +14,12 @@ enum DeliveryStatus: string
     case Delivered = 'delivered';
     case Cancelled = 'cancelled';
 
+    /** Lower-case words for sentences and badges ("out for delivery"). */
+    public function label(): string
+    {
+        return str_replace('_', ' ', $this->value);
+    }
+
     public function canTransitionTo(self $next): bool
     {
         return in_array($next, $this->nextStatuses(), true);

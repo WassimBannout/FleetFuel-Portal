@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\CardBalanceController;
+use App\Http\Controllers\Api\V1\DeliveryOrderController;
 use App\Http\Controllers\Api\V1\DriverController;
 use App\Http\Controllers\Api\V1\FuelCardController;
 use App\Http\Controllers\Api\V1\ProductPriceController;
@@ -14,8 +15,8 @@ use Illuminate\Support\Facades\Route;
 // bearer tokens authenticate here: config/sanctum.php has no session guard,
 // so a browser cookie never counts. Token abilities are necessary but never
 // sufficient: role middleware, scoped lookups and policies still apply.
-// Delivery (M07) and report/export (M08) endpoints are documented as
-// planned in the OpenAPI file and not routed yet.
+// Report and export endpoints (M08) are documented as planned in the
+// OpenAPI file and not routed yet.
 
 Route::prefix('v1')->name('api.v1.')->group(function () {
     // Public: credentials in, token out; 5 requests/minute per email + IP.
@@ -49,8 +50,9 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             ->where('card_no', '[A-Za-z0-9-]{1,40}')
             ->name('cards.balance');
 
-        // Company data: admins and company managers only. {card} is looked
-        // up through the caller's tenant scope (AppServiceProvider).
+        // Company data: admins and company managers only. {card} and
+        // {delivery} are looked up through the caller's tenant scope
+        // (AppServiceProvider).
         Route::middleware('role:admin,company_manager')->group(function () {
             Route::patch('cards/{card}', [FuelCardController::class, 'update'])
                 ->middleware('abilities:cards:write')
@@ -61,6 +63,20 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::post('vehicles', [VehicleController::class, 'store'])->middleware('abilities:fleet:write')->name('vehicles.store');
             Route::get('drivers', [DriverController::class, 'index'])->middleware('abilities:fleet:read')->name('drivers.index');
             Route::post('drivers', [DriverController::class, 'store'])->middleware('abilities:fleet:write')->name('drivers.store');
+
+            Route::get('delivery-orders', [DeliveryOrderController::class, 'index'])->middleware('abilities:deliveries:read')->name('delivery-orders.index');
+            Route::post('delivery-orders', [DeliveryOrderController::class, 'store'])->middleware('abilities:deliveries:write')->name('delivery-orders.store');
+            Route::get('delivery-orders/{delivery}', [DeliveryOrderController::class, 'show'])
+                ->middleware('abilities:deliveries:read')
+                ->whereNumber('delivery')
+                ->name('delivery-orders.show');
+            // Either ability gets past the route; the request then requires
+            // deliveries:status from an admin and deliveries:write from a
+            // manager, who may only cancel their own pending order.
+            Route::patch('delivery-orders/{delivery}/status', [DeliveryOrderController::class, 'updateStatus'])
+                ->middleware('ability:deliveries:status,deliveries:write')
+                ->whereNumber('delivery')
+                ->name('delivery-orders.status');
         });
     });
 });

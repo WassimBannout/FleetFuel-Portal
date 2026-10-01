@@ -32,6 +32,18 @@ class DeliveryOrderPolicy
         return $user->isAdmin();
     }
 
+    /**
+     * May this user ask for the move $from -> $to at all? Admins may ask for
+     * any move; a manager only for cancelling their own pending order.
+     * DeliveryOrderService calls this with the order locked; whether the
+     * move is allowed from the current status is checked there too.
+     */
+    public function transition(User $user, DeliveryOrder $order, DeliveryStatus $from, DeliveryStatus $to): bool
+    {
+        return $user->isAdmin()
+            || ($user->managesCompany($order->company_id) && $from === DeliveryStatus::Pending && $to === DeliveryStatus::Cancelled);
+    }
+
     /** An admin may cancel any open order; a manager only their own pending one. */
     public function cancel(User $user, DeliveryOrder $order): bool
     {

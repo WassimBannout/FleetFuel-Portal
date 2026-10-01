@@ -34,4 +34,10 @@ class DeliveryStatusTest extends TestCase
 
         $this->assertSame([DeliveryStatus::Delivered, DeliveryStatus::Cancelled], array_values($terminal));
     }
+
+    public function test_labels_are_readable_words(): void
+    {
+        $this->assertSame('out for delivery', DeliveryStatus::OutForDelivery->label());
+        $this->assertSame('pending', DeliveryStatus::Pending->label());
+    }
 }

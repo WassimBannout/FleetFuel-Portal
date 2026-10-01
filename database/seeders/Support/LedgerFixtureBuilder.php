@@ -5,20 +5,24 @@ namespace Database\Seeders\Support;
 use App\Enums\DeliveryStatus;
 use App\Enums\RateSource;
 use App\Enums\UserRole;
+use App\Exceptions\BusinessRuleViolation;
 use App\Exceptions\PurchaseDeclined;
 use App\Models\AuditLog;
 use App\Models\Company;
 use App\Models\DeliveryOrder;
-use App\Models\DeliveryStatusHistory;
 use App\Models\ExchangeRate;
 use App\Models\FuelCard;
 use App\Models\FuelTransaction;
 use App\Models\Product;
 use App\Models\Station;
 use App\Models\User;
+use App\Services\DeliveryOrderService;
 use App\Services\FuelTransactionService;
 use Carbon\CarbonImmutable;
+use Closure;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use LogicException;
 
 /**
@@ -30,13 +34,17 @@ use LogicException;
  *   the live service would decline is refused here too, so fixtures never
  *   contain impossible history. Only request-time rules (the 72-hour
  *   window, replays) are skipped, because the purpose is to record the past.
- * - Quota changes, manual rate overrides and delivery transitions write
- *   their audit/history rows in the same transaction as the change (the
- *   delivery service arrives in M07).
+ * - Delivery orders go through DeliveryOrderService's historical methods,
+ *   the code the web screens and the API use, judged at the given time.
+ * - Quota changes and manual rate overrides write their audit rows in the
+ *   same transaction as the change.
  */
 final class LedgerFixtureBuilder
 {
-    public function __construct(private readonly FuelTransactionService $transactions) {}
+    public function __construct(
+        private readonly FuelTransactionService $transactions,
+        private readonly DeliveryOrderService $deliveries,
+    ) {}
 
     public function recordPurchase(
         FuelCard $card,
@@ -134,97 +142,47 @@ final class LedgerFixtureBuilder
     }
 
     /**
-     * Create a pending delivery order with its initial null -> pending history.
+     * Create a pending delivery order with its initial null -> pending
+     * history, through DeliveryOrderService with the clock at $createdAt.
      *
      * @param  array{address: string, governorate: string, liters: string, preferred_start_at: CarbonImmutable, preferred_end_at: CarbonImmutable}  $details
      */
     public function createDelivery(Company $company, User $creator, array $details, CarbonImmutable $createdAt): DeliveryOrder
     {
-        $isOwnManager = $creator->role === UserRole::CompanyManager && $creator->company_id === $company->id;
-
-        if ($creator->role !== UserRole::Admin && ! $isOwnManager) {
-            throw new LogicException('Only an admin or the company\'s own manager can create its delivery order.');
-        }
-
-        return DB::transaction(function () use ($company, $creator, $details, $createdAt): DeliveryOrder {
-            $order = DeliveryOrder::query()->forceCreate($details + [
-                'company_id' => $company->id,
-                'created_by' => $creator->id,
-                'status' => DeliveryStatus::Pending,
-                'created_at' => $createdAt,
-                'updated_at' => $createdAt,
-            ]);
-
-            DeliveryStatusHistory::query()->forceCreate([
-                'delivery_order_id' => $order->id,
-                'from_status' => null,
-                'to_status' => DeliveryStatus::Pending,
-                'changed_by' => $creator->id,
-                'changed_at' => $createdAt,
-            ]);
-
-            return $order;
-        });
+        return $this->refusalsAsLogicErrors('delivery order', fn (): DeliveryOrder => $this->deliveries->createHistorical($company, $details, $creator, $createdAt));
     }
 
     /**
-     * Move an order along the delivery state machine, appending history and
-     * audit rows. Admins may make any allowed transition; a manager may only
-     * cancel their own company's pending order.
+     * Move an order along the delivery state machine with the rules live
+     * requests follow (DeliveryOrderService): admins may make any allowed
+     * move; a manager may only cancel their own company's pending order.
+     * History and audit rows are written in the same transaction.
      *
-     * @param  array<string, mixed>  $changes  e.g. schedule window and truck, or cancel_reason
+     * @param  array{scheduled_start_at?: CarbonImmutable, scheduled_end_at?: CarbonImmutable, assigned_truck?: string, cancel_reason?: string}  $changes
      */
-    public function transitionDelivery(
-        DeliveryOrder $order,
-        DeliveryStatus $to,
-        User $actor,
-        CarbonImmutable $at,
-        array $changes = [],
-        ?string $note = null,
-    ): DeliveryOrder {
-        return DB::transaction(function () use ($order, $to, $actor, $at, $changes, $note): DeliveryOrder {
-            $order = DeliveryOrder::query()->lockForUpdate()->findOrFail($order->id);
-            $from = $order->status;
+    public function transitionDelivery(DeliveryOrder $order, DeliveryStatus $to, User $actor, CarbonImmutable $at, array $changes = []): DeliveryOrder
+    {
+        return $this->refusalsAsLogicErrors('delivery transition', fn (): DeliveryOrder => $this->deliveries->transitionHistorical($order, $to, $changes, $actor, $at));
+    }
 
-            if (! $from->canTransitionTo($to)) {
-                throw new LogicException("A delivery cannot move from {$from->value} to {$to->value}.");
-            }
-
-            $isOwnManagerCancelling = $actor->role === UserRole::CompanyManager
-                && $actor->company_id === $order->company_id
-                && $from === DeliveryStatus::Pending
-                && $to === DeliveryStatus::Cancelled;
-
-            if ($actor->role !== UserRole::Admin && ! $isOwnManagerCancelling) {
-                throw new LogicException('This user may not make that delivery transition.');
-            }
-
-            if ($to === DeliveryStatus::Delivered) {
-                $changes['delivered_at'] = $at;
-            }
-
-            $order->forceFill($changes + ['status' => $to, 'updated_at' => $at])->save();
-
-            DeliveryStatusHistory::query()->forceCreate([
-                'delivery_order_id' => $order->id,
-                'from_status' => $from,
-                'to_status' => $to,
-                'changed_by' => $actor->id,
-                'note' => $note,
-                'changed_at' => $at,
-            ]);
-
-            $this->audit($actor, 'delivery_order.status_changed', $order->getMorphClass(), $order->id, $order->company_id,
-                ['status' => $from->value],
-                ['status' => $to->value] + array_map(
-                    fn (mixed $value): mixed => $value instanceof CarbonImmutable ? $value->toIso8601ZuluString() : $value,
-                    $changes,
-                ),
-                $at,
-            );
-
-            return $order;
-        });
+    /**
+     * Fixtures must describe possible history, so a refusal is a bug in the
+     * fixture: report it as a LogicException with the refusal's reason.
+     *
+     * @template T
+     *
+     * @param  Closure(): T  $write
+     * @return T
+     */
+    private function refusalsAsLogicErrors(string $what, Closure $write): mixed
+    {
+        try {
+            return $write();
+        } catch (BusinessRuleViolation $e) {
+            throw new LogicException("Fixture {$what} refused ({$e->errorCode}): {$e->getMessage()}", 0, $e);
+        } catch (ValidationException $e) {
+            throw new LogicException("Fixture {$what} refused (validation_failed): ".implode(' ', Arr::flatten($e->errors())), 0, $e);
+        }
     }
 
     /**

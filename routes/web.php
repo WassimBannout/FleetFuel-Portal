@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Web\CompanyController;
 use App\Http\Controllers\Web\DashboardController;
+use App\Http\Controllers\Web\DeliveryOrderController;
 use App\Http\Controllers\Web\DriverController;
 use App\Http\Controllers\Web\ExchangeRateController;
 use App\Http\Controllers\Web\FuelCardController;
@@ -80,5 +81,12 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::resource('cards', FuelCardController::class)->except(['destroy']);
         Route::patch('/cards/{card}/limits', [FuelCardController::class, 'updateLimits'])->name('cards.limits');
         Route::patch('/cards/{card}/status', [FuelCardController::class, 'updateStatus'])->name('cards.status');
+
+        // Diesel deliveries. Managers request and may cancel their own
+        // pending orders; only admins schedule, dispatch and deliver
+        // (DeliveryOrderService decides, with the order locked).
+        Route::resource('deliveries', DeliveryOrderController::class)->only(['index', 'create', 'store', 'show']);
+        Route::get('/deliveries/{delivery}/panel', [DeliveryOrderController::class, 'panel'])->name('deliveries.panel');
+        Route::patch('/deliveries/{delivery}/status', [DeliveryOrderController::class, 'updateStatus'])->name('deliveries.status');
     });
 });

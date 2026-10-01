@@ -112,6 +112,7 @@ class AppServiceProvider extends ServiceProvider
         $this->bindScoped('vehicle', fn (User $user) => Vehicle::query()->visibleTo($user));
         $this->bindScoped('driver', fn (User $user) => Driver::query()->visibleTo($user));
         $this->bindScoped('card', fn (User $user) => FuelCard::query()->visibleTo($user));
+        $this->bindScoped('delivery', fn (User $user) => DeliveryOrder::query()->visibleTo($user));
     }
 
     /**

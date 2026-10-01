@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "FleetFuel Portal API",
-    "version": "0.6.0",
-    "description": "REST API of the FleetFuel Portal, a fictional portfolio project. Operations with x-status \"implemented\" are served and checked against real responses by tests/Feature/Api/OpenApiContractTest.php and the per-endpoint API tests; x-abilities and x-roles are compared with the route middleware. Operations with x-status \"planned\" are not routed yet (deliveries in M07, reports and exports in M08). Business details: docs/04-BUSINESS-RULES.md and docs/05-API-CONTRACT.md."
+    "version": "0.7.0",
+    "description": "REST API of the FleetFuel Portal, a fictional portfolio project. Operations with x-status \"implemented\" are served and checked against real responses by tests/Feature/Api/OpenApiContractTest.php and the per-endpoint API tests; x-abilities (all required) and x-any-abilities (at least one required) and x-roles are compared with the route middleware. Operations with x-status \"planned\" are not routed yet (reports and exports in M08). Business details: docs/04-BUSINESS-RULES.md and docs/05-API-CONTRACT.md."
   },
   "servers": [
     {
@@ -1747,7 +1747,7 @@
       "get": {
         "operationId": "listDeliveries",
         "summary": "List own-company or admin delivery orders",
-        "x-status": "planned",
+        "x-status": "implemented",
         "x-milestone": "M07",
         "x-abilities": [
           "deliveries:read"
@@ -1890,12 +1890,13 @@
               ]
             }
           }
-        ]
+        ],
+        "description": "Newest first. Admins see every company and may filter with company_id; a company manager sees their own company only and must omit company_id (422). Optional status filter. Each order includes its chronological history."
       },
       "post": {
         "operationId": "createDelivery",
         "summary": "Create pending diesel delivery with initial history",
-        "x-status": "planned",
+        "x-status": "implemented",
         "x-milestone": "M07",
         "x-abilities": [
           "deliveries:write"
@@ -1921,6 +1922,14 @@
                   ],
                   "additionalProperties": false
                 }
+              }
+            },
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Delivery order detail URI."
               }
             }
           },
@@ -2012,14 +2021,15 @@
               }
             }
           }
-        }
+        },
+        "description": "Creates a pending diesel order and its initial null -> pending history row; no card, quota or ledger change. Admin must send company_id (an active company); a manager must omit it. liters is a positive decimal string; preferred_start_at and preferred_end_at are offset-bearing instants, the start in the future (at most 366 days ahead) and the end after the start. status, truck, delivery time, price or any other field is refused (422). A manager of an inactive company gets 403 company_inactive."
       }
     },
     "/delivery-orders/{id}": {
       "get": {
         "operationId": "showDelivery",
         "summary": "Read scoped delivery and history",
-        "x-status": "planned",
+        "x-status": "implemented",
         "x-milestone": "M07",
         "x-abilities": [
           "deliveries:read"
@@ -2137,16 +2147,21 @@
               "minimum": 1
             }
           }
-        ]
+        ],
+        "description": "The order with its chronological history (changed_at, then id). Another company's order is 404."
       }
     },
     "/delivery-orders/{id}/status": {
       "patch": {
         "operationId": "transitionDelivery",
         "summary": "Advance lifecycle or cancel own pending order",
-        "x-status": "planned",
+        "x-status": "implemented",
         "x-milestone": "M07",
         "x-abilities": [],
+        "x-any-abilities": [
+          "deliveries:status",
+          "deliveries:write"
+        ],
         "x-roles": [
           "admin",
           "company_manager"
@@ -2260,7 +2275,7 @@
             }
           }
         },
-        "description": "Admin advances states. Manager may only cancel own pending order. expected_status is required. Scheduling needs future scheduled_start_at/end_at and assigned_truck; cancellation needs reason.",
+        "description": "expected_status is the status the caller last saw; status is the target. The order row is locked, then: a company manager may only ask for pending -> cancelled on their own order (anything else 403 forbidden); if the order is no longer in expected_status the change is refused with 409 stale_state (details.current_status); a skipped step, the same status again or any move out of delivered/cancelled is 409 invalid_transition. Scheduling needs scheduled_start_at (future, at most 366 days ahead), scheduled_end_at (after the start) and assigned_truck; cancelling needs reason; these fields are refused for other targets (422). delivered_at is set from server time. Each accepted change writes one history row and one audit row in the same transaction. Token: an admin needs deliveries:status, a company manager deliveries:write; the route accepts either and the request checks the one the role needs (403).",
         "parameters": [
           {
             "name": "id",

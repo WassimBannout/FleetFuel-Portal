@@ -66,7 +66,7 @@ class OpenApiContractTest extends TestCase
     /**
      * Route parity: every implemented operation is routed with the documented
      * token abilities and roles, every route is documented, and planned
-     * operations (deliveries, reports) are not routed yet.
+     * operations (reports, exports) are not routed yet.
      */
     public function test_routes_match_the_documented_operations_abilities_and_roles(): void
     {
@@ -92,6 +92,7 @@ class OpenApiContractTest extends TestCase
                 $implemented[$key] = [
                     'public' => ($operation->security ?? null) === [],
                     'abilities' => $this->sorted($operation->{'x-abilities'}),
+                    'any_abilities' => $this->sorted($operation->{'x-any-abilities'} ?? []),
                     'roles' => $this->sorted($operation->{'x-roles'} ?? []),
                 ];
             }
@@ -112,12 +113,8 @@ class OpenApiContractTest extends TestCase
 
         sort($planned);
         $this->assertSame([
-            'GET /delivery-orders',
-            'GET /delivery-orders/{}',
             'GET /exports/transactions.csv',
             'GET /reports/consumption',
-            'PATCH /delivery-orders/{}/status',
-            'POST /delivery-orders',
         ], $planned);
     }
 
@@ -222,17 +219,22 @@ class OpenApiContractTest extends TestCase
     }
 
     /**
-     * @return array{public: bool, abilities: list<string>, roles: list<string>}
+     * `abilities:` needs every listed token ability, `ability:` any one of them.
+     *
+     * @return array{public: bool, abilities: list<string>, any_abilities: list<string>, roles: list<string>}
      */
     private function guards(RoutingRoute $route): array
     {
         $middleware = array_filter($route->gatherMiddleware(), 'is_string');
         $abilities = [];
+        $anyAbilities = [];
         $roles = [];
 
         foreach ($middleware as $name) {
             if (str_starts_with($name, 'abilities:')) {
                 $abilities = [...$abilities, ...explode(',', substr($name, strlen('abilities:')))];
+            } elseif (str_starts_with($name, 'ability:')) {
+                $anyAbilities = [...$anyAbilities, ...explode(',', substr($name, strlen('ability:')))];
             } elseif (str_starts_with($name, 'role:')) {
                 $roles = [...$roles, ...explode(',', substr($name, strlen('role:')))];
             }
@@ -241,6 +243,7 @@ class OpenApiContractTest extends TestCase
         return [
             'public' => ! in_array('auth:sanctum', $middleware, true),
             'abilities' => $this->sorted($abilities),
+            'any_abilities' => $this->sorted($anyAbilities),
             'roles' => $this->sorted($roles),
         ];
     }

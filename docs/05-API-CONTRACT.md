@@ -1,6 +1,6 @@
 # REST API contract
 
-Base URL: `http://localhost:8080/api/v1` locally. Machine-readable contract: [openapi.json](api/openapi.json). Operations marked `x-status: implemented` there are served and checked against real responses by the test suite; `planned` operations (deliveries M07, reports and export M08) are not routed yet. Keep it, Postman and this document synchronized whenever behavior changes.
+Base URL: `http://localhost:8080/api/v1` locally. Machine-readable contract: [openapi.json](api/openapi.json). Operations marked `x-status: implemented` there are served and checked against real responses by the test suite; `planned` operations (reports and export, M08) are not routed yet. Keep it, Postman and this document synchronized whenever behavior changes.
 
 ## Authentication and common conventions
 
@@ -211,7 +211,33 @@ Every response carries a server-generated `X-Request-Id` (a client-supplied valu
 
 A token carries the abilities of its user's role (table above), chosen by the server at issue time. Each route requires one ability (`x-abilities` in `openapi.json`). A token without it is refused with 403 before anything else happens.
 
+The delivery status route is the one exception. It admits a token with either `deliveries:status` or `deliveries:write` (`x-any-abilities`), because admins and managers use it for different moves. The request then requires `deliveries:status` from an admin and `deliveries:write` from a manager (403 otherwise).
+
 Abilities only narrow access; they never widen it. The role check, the tenant scope and the policies still run, so even a hand-made token with every ability cannot make a manager see another company's card or a station operator change a quota.
+
+## Implemented behavior (M07)
+
+`GET`/`POST /delivery-orders`, `GET /delivery-orders/{id}` and `PATCH /delivery-orders/{id}/status` are live. Details the tables above leave open:
+
+- **Creation.**
+  - The order starts `pending` with one history row (`from_status` null, `to_status` pending, by the creator, at creation time). Creation writes no audit row: that history row records who and when, and every later change is audited.
+  - `company_id` is for admins only and must name an active company (422 "Choose an active company."). A manager of an inactive company gets 403 `company_inactive`.
+  - `liters` is a positive decimal string up to 99999999.99. `preferred_start_at` must be after now and at most 366 days ahead; `preferred_end_at` must be after the start.
+  - Status, truck, delivery time, a price or any other field is 422 "This field is not allowed".
+  - 201 carries `Location: /api/v1/delivery-orders/{id}`.
+- **Lists and detail.** Newest first (creation time, then id). Every order includes its history, ordered by `changed_at`, then id. `status` filters; `company_id` is for admins only.
+- **Status changes.** Checked in this order, each refusal writing nothing:
+  1. Validation (422): `expected_status` and `status` are required. Scheduling needs `scheduled_start_at`, `scheduled_end_at` and `assigned_truck` (at most 60 characters); cancelling needs `reason` (at most 255). These fields are refused for any other target.
+  2. The order row is locked (`SELECT … FOR UPDATE`) for the rest of the check.
+  3. Role (403 `forbidden`): a company manager may only ask for pending → cancelled on their own order.
+  4. `expected_status` (409 `stale_state`): the order is no longer in the status the caller saw. `details.current_status` says what it is now. A manager whose pending order was scheduled meanwhile gets this, not 403.
+  5. The move itself (409 `invalid_transition`): a skipped step, the same status again, or anything out of `delivered` or `cancelled`. `details.current_status` is included.
+  6. Details (422): the scheduled window must start after now, at most 366 days ahead, and end after it starts.
+  7. The order is updated, and exactly one history row and one audit row (`delivery_order.status_changed`, with the old status and the new status plus the fields it set) are written in the same transaction.
+- **Server-set fields.** `delivered_at` is the server time of the delivery, set once. The cancellation reason is stored as `cancel_reason`. The history `note` is always null in the MVP.
+- **Inactive companies.** New orders are refused, but open orders can still be moved on or cancelled.
+- **No card effect.** A delivery never touches fuel cards, quotas or the POS ledger.
+- **Concurrency.** Two changes that start from the same `expected_status` queue on the row lock. The first one wins; the second gets 409 `stale_state` (T28, separate processes on MySQL).
 
 ## CSV contract
 

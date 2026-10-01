@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | 01 — POS scenario | M06 (done) | Station token, stations, prices, balance, one 20.00 L purchase, identical replay (200), conflicting retry (409), blocked card and over-quota declines (403), detail, balance after, refused `station_id` (422), station refused on vehicles and card changes (403), missing token (401) |
 | 02 — Manager access | M06 (done) | Manager token, own vehicles, drivers and ledger, `company_id` refused (422), other company's card hidden (404), manager cannot post a purchase (403) |
-| 03 — Delivery scenario | M07 | Not implemented yet |
+| 03 — Delivery scenario | M07 (done) | Issues its own manager and admin tokens. Manager creates an order (201, one history row); manager cannot schedule (403); admin cannot skip to delivered (409); admin schedules; the same request again is stale (409 `stale_state`); manager cannot cancel once scheduled (403); admin dispatches and delivers; delivered is final (409); the timeline shows four steps; a second order is cancelled by its manager; both tokens are revoked (204, then 401) |
 | 04 — Reports and export | M08 | Not implemented yet |
 | 05 — Revoke tokens | M06 (done) | Both tokens revoked (204), then refused (401) |
 
@@ -45,6 +45,18 @@ DP="$(sed -n 's/^DEMO_PASSWORD=//p' .env)" docker compose run --rm --no-deps -e 
 ```
 
 Replace `XXXX` with the tag printed by `demo:simulator-cards`.
+
+## Running folder 03 (deliveries)
+
+Folder 03 needs only the demo password; it never touches a fuel card, so it can run as often as you like. Each run adds two fictional orders to the demo company: one delivered, one cancelled.
+
+```bash
+DP="$(sed -n 's/^DEMO_PASSWORD=//p' .env)" docker compose run --rm --no-deps -e DP node sh -c \
+  'npx --yes newman@6 run postman/FleetFuel.postman_collection.json -e postman/local.postman_environment.json \
+     --folder "03 — Delivery scenario (M07)" --env-var base_url=http://web/api/v1 --env-var "demo_password=$DP"'
+```
+
+In the Postman app, run folder 03 on its own after setting `demo_password`.
 
 ## Running it again
 

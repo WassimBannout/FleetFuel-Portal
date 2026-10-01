@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AuditLog;
 use App\Models\User;
 use App\Support\RequestId;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -17,6 +18,7 @@ class AuditService
     /**
      * @param  array<string, mixed>|null  $oldValues
      * @param  array<string, mixed>|null  $newValues
+     * @param  CarbonInterface|null  $at  When the change happened, for seeded history only; live changes use now.
      */
     public function record(
         string $action,
@@ -25,6 +27,7 @@ class AuditService
         ?int $companyId = null,
         ?array $oldValues = null,
         ?array $newValues = null,
+        ?CarbonInterface $at = null,
     ): AuditLog {
         return AuditLog::query()->forceCreate([
             'user_id' => $actor?->id,
@@ -35,6 +38,6 @@ class AuditService
             'old_values' => $oldValues,
             'new_values' => $newValues,
             'request_id' => RequestId::current(),
-        ]);
+        ] + ($at === null ? [] : ['created_at' => $at]));
     }
 }
