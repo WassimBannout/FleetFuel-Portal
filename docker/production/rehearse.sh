@@ -111,10 +111,15 @@ health=$(curl -s "$base/health")
 [[ "$health" == *'"database":"ok"'* ]] || fail "/health answered $health"
 ok "/up 200, /health $health"
 login=$(curl -s "$base/login")
-asset=$(grep -oE '/build/assets/app-[A-Za-z0-9_-]+\.js' <<<"$login" | head -n 1)
-[[ -n "$asset" ]] || fail "the sign-in page references no compiled script"
-curl -sI "$base$asset" | grep -qi '^cache-control: max-age=31536000' || fail "$asset is not cached for a year"
-curl -sI "$base/login" | grep -qi '^x-content-type-options: nosniff' || fail "security headers missing"
+asset_re='/build/assets/app-[A-Za-z0-9_-]+\.js'
+[[ "$login" =~ $asset_re ]] || fail "the sign-in page references no compiled script"
+asset=${BASH_REMATCH[0]}
+# Capture, then search: with pipefail, `cmd | grep -q` can fail when grep exits
+# at the first match while cmd is still writing (SIGPIPE, status 141).
+asset_headers=$(curl -sI "$base$asset") || fail "could not fetch $asset"
+grep -qi '^cache-control: max-age=31536000' <<<"$asset_headers" || fail "$asset is not cached for a year"
+login_headers=$(curl -sI "$base/login") || fail "could not fetch /login"
+grep -qi '^x-content-type-options: nosniff' <<<"$login_headers" || fail "security headers missing"
 missing=$(curl -s -w ' %{http_code}' "$base/no-such-page")
 [[ "$missing" == *'Page not found'*' 404' ]] || fail "the 404 page"
 about=$(compose exec -T app php artisan about --json)
@@ -125,7 +130,10 @@ ok "hashed assets cached for a year, security headers, plain 404 page, productio
 
 step "Web sign-in (manager)"
 jar="$work/cookies.txt"
-token=$(curl -s -c "$jar" -b "$jar" "$base/login" | grep -oE 'name="_token" value="[^"]+"' | head -n 1 | sed -e 's/.*value="//' -e 's/"$//')
+login_page=$(curl -s -c "$jar" -b "$jar" "$base/login") || fail "could not fetch /login"
+token_re='name="_token" value="([^"]+)"'
+[[ "$login_page" =~ $token_re ]] || fail "the sign-in page has no CSRF token"
+token=${BASH_REMATCH[1]}
 signin=$(printf '%s' "$demo_password" | curl -s -o /dev/null -w '%{http_code} %{redirect_url}' -c "$jar" -b "$jar" \
     --data-urlencode "_token=$token" --data-urlencode 'email=manager.atlas@fleetfuel.test' --data-urlencode 'password@-' "$base/login")
 [[ "$signin" == "302 $base/dashboard" ]] || fail "sign-in answered $signin"
@@ -149,7 +157,8 @@ quiet compose exec -T app php artisan usage:reconcile --no-interaction
 ok "every request and assertion passed; the quota counters reconcile with the ledger"
 
 step "Scheduler and logs"
-compose exec -T scheduler php artisan schedule:list --no-interaction | grep -q 'rates:sync' || fail "rates:sync is not scheduled"
+schedule=$(compose exec -T scheduler php artisan schedule:list --no-interaction) || fail "schedule:list failed"
+grep -q 'rates:sync' <<<"$schedule" || fail "rates:sync is not scheduled"
 quiet compose exec -T app php artisan rates:sync --force --no-interaction
 logs=$(compose logs --no-color app scheduler 2>&1)
 if grep -qF "$demo_password" <<<"$logs" || grep -qF "${app_key#base64:}" <<<"$logs"; then

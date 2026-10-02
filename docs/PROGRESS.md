@@ -112,6 +112,12 @@ Use TODO / IN PROGRESS / DONE / BLOCKED. A milestone is DONE only when its check
 | `gh api …/commits/f17b6a4/check-runs` | "Setup and quality gates", GitHub Actions (app 15368), success |
 | `gh api -X PUT …/branches/main/protection`, then `…/branches/main` | Strict required check "Setup and quality gates", a pull request with 0 approvals, enforced for administrators, force pushes and deletion off; `protected=true` |
 | `DocumentationParityTest` after the docs edits | **5 passed / 127 assertions** |
+| Pull request #1, first CI run (37011020698, on `1559b04`) | **Failed** only at the production rehearsal: "FAIL: rates:sync is not scheduled", with no error printed. Every other gate passed, including 593 tests / 6027 assertions. The same check had passed in the three previous CI runs and three local rehearsals on identical script code |
+| Cause, reproduced in isolation: `set -o pipefail; { printf 'x rates:sync\n'; sleep 0.3; printf 'more\n'; } \| grep -q rates:sync` | Status **141**: `grep -q` exits at the first match, and the writer then dies of SIGPIPE, so the whole pipeline fails. Capturing first and searching the variable gives status 0. Under `set -euo pipefail` the same race affected four lines: `rehearse.sh` (the schedule check, both header checks, the CSRF-token extraction) and `restore-check.sh` (the pending-migrations check) |
+| A fake `migrate:status` that prints "Pending" and keeps writing, through the old and new `restore-check.sh` condition | Old: **missed** the pending migration. New: caught it |
+| `make rehearse` with my first fix | **Failed**, on my own mistake: `grep -m 1 -o` stops after the first matching *line* but prints every match on it. The sign-in page names the script twice on one line, so the asset path held two lines. Replaced by bash's own `=~` match (first match, no pipe) for the asset and the CSRF token |
+| `bash -n`, then ShellCheck v0.10.0 (`-S warning`, Docker) on `rehearse.sh`, `restore-check.sh`, `backup.sh` | Clean |
+| `make rehearse` with the final fix | **Passed in 104 s**: every step, including Newman 26 + 29 requests with 0 failures and 24 identical tables after the restore. No rehearsal or restore-check container, volume, network or image left |
 
 ### What changed
 
@@ -120,13 +126,15 @@ Use TODO / IN PROGRESS / DONE / BLOCKED. A milestone is DONE only when its check
 - **`CLAUDE.md`:** `main` changes only through pull requests.
 - **`README.md`:** the CI row mentions pull requests and the protected branch.
 - **`docs/DECISIONS.md`, `CHANGELOG.md` and this file.**
+- **Fix:** `docker/production/rehearse.sh` and `restore-check.sh` capture command output before searching it, and no longer pipe into `grep -q` or `head` under `pipefail`.
 
 ### Not run or not verified
 
-- A direct push to `main` was not attempted to prove the rule. The rule was read back from the API, and this pull request is the first change under it.
+- A direct push to `main` was not attempted to prove the rule. The rule was read back from the API, and this pull request is the first change under it. Its required check did block the merge while it was failing.
+- The race cannot be forced in CI on demand; the fix removes the pattern rather than retrying it. A rerun of the failed job was deliberately not used to get a green check.
 - Hosting, the demo policy and the recording: still the owner's decisions.
 
-**Suggested commit message:** `docs: record the public repository and branch protection`.
+**Suggested commit message:** `fix: make the rehearsal checks safe from broken pipes; record the public repository`.
 
 **One concept to explain:** branch protection turns a habit into a rule. Before it, "run CI before changing `main`" was a promise. Now GitHub refuses any change to `main` that has not passed the same checks in a pull request, including the owner's own changes and force pushes that would rewrite published history.
 

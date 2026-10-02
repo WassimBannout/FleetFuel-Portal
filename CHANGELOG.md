@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed: the rehearsal and the restore check piped into `grep -q` and `head` under `pipefail`. When `grep` stopped at its first match while the writer was still writing, the pipeline failed (SIGPIPE, status 141). The rehearsal then reported a false failure ("rates:sync is not scheduled", first seen in pull request #1's CI), and the restore check could have missed a pending migration. Output is now captured first, then searched.
 - Public repository: the owner made it public, with the history unchanged. `main` is protected: a pull request that passes "Setup and quality gates", no force pushes. The runbook, CLAUDE.md and the README describe the pull-request workflow.
 - Portfolio release preparation:
   - The MIT license (`LICENSE`, both `composer.json` files). The third-party OpenAPI schema fixture keeps its Apache License 2.0, whose text is added next to it.

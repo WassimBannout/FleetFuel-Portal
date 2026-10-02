@@ -62,7 +62,10 @@ app() {
         "$image" "$@"
 }
 
-if app php artisan migrate:status --no-interaction | grep -q 'Pending'; then
+# Capture first: with pipefail, `cmd | grep -q` turns false when grep exits at the
+# first match while cmd is still writing (SIGPIPE), which would hide a pending migration.
+migration_status=$(app php artisan migrate:status --no-interaction)
+if grep -q 'Pending' <<<"$migration_status"; then
     echo "FAIL: the restored database has pending migrations." >&2
     exit 1
 fi
