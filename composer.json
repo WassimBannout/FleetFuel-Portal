@@ -4,7 +4,7 @@
     "type": "project",
     "description": "Portfolio project: fictional corporate fleet-fuel cards, station POS purchases and diesel deliveries with USD/LBP reporting.",
     "keywords": ["laravel", "portfolio", "fleet", "fuel"],
-    "license": "proprietary",
+    "license": "MIT",
     "require": {
         "php": "^8.3",
         "brick/math": "^1.0",

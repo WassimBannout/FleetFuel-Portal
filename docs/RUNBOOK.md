@@ -230,8 +230,8 @@ To require it before merging: in the repository settings, add a branch rule for 
 
 Making the repository public publishes its whole history, not only the current files. Checked on 2026-10-02:
 - **Secrets:** a gitleaks v8.28.0 scan of all 10 commits found one match, a false positive: the `YOUR-TOKEN` placeholder in the station page's curl example. No `.env`, key, dump or backup file was ever committed, only the `.example` templates.
-- **Commit email:** every commit records the author's email address, which becomes public with the history. GitHub's private-email setting and its noreply address protect future commits only. Changing past commits would need a history rewrite and a force push; that is the owner's call and not part of this runbook.
-- **Repository details:** the description, website and topics are empty, and there is no license file. Add the demo URL once it exists.
+- **Commit email:** every commit records the author's email address, which becomes public with the history. Since 2026-10-02, this repository's local Git config uses the owner's GitHub noreply address, so new commits no longer show the personal one. The 11 earlier commits still do, because a noreply address protects future commits only. Changing past commits would need a history rewrite and a force push; that is the owner's call and not part of this runbook.
+- **Repository details:** the MIT license, the description and the topics were added on 2026-10-02. The website stays empty until a demo URL exists.
 
 ## Deployment record
 

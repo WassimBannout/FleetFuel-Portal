@@ -8,7 +8,7 @@ The project was implemented with AI assistance (Claude Code) under your directio
 
 - Built FleetFuel Portal, a Laravel 13 / PHP 8.3, MySQL 8.4 and Bootstrap / jQuery web application for corporate fleet fuel cards, with role-based tenant isolation and an audited diesel-delivery workflow.
 - Developed a Sanctum-authenticated REST API with atomic quota enforcement under concurrent requests and idempotent retries. A standalone PHP POS simulator consumes it, and an OpenAPI 3.1 contract and a Postman collection are checked against its real responses.
-- Integrated a scheduled exchange-rate feed with validated caching and an explicit no-rate failure mode. Stored immutable USD/LBP price and rate snapshots on every purchase, and wrote SQL consumption and anomaly reports (window functions) with a scoped, formula-safe CSV export.
+- Integrated a scheduled exchange-rate feed that stores validated, deduplicated observations, each usable for up to 72 hours, with an explicit no-rate failure mode. Stored immutable USD/LBP price and rate snapshots on every purchase, and wrote SQL consumption and anomaly reports (window functions) with a scoped, formula-safe CSV export.
 - Automated 593 PHPUnit tests and 14 JavaScript tests in GitHub Actions, including multi-process MySQL concurrency tests. Dockerized development, plus a non-root production image whose scripted deployment rehearsal verifies backup and restore.
 
 Do not add:

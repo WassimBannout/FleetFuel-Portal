@@ -384,3 +384,18 @@ Template: date, affected decision, old/new behavior, reason, spec/test updates, 
 - **Restore checks:** `restore-check.sh` restores into a throwaway MySQL server and checks the copy with the production image (`migrate:status`, `usage:reconcile`, row counts and `CHECKSUM TABLE`). Encryption and off-host storage are the operator's steps; the runbook gives a `gpg` command, which was not run here.
 - **`make rehearse`** (also a CI step) deploys the image locally in the `fleetfuel-rehearsal` Compose project with generated secrets, tests it end to end and removes everything. It uses `SESSION_SECURE_COOKIE=false`, because it is plain HTTP on 127.0.0.1.
 - **README** replaced with an implementation-based one. `docs/DEMO-SCRIPT.md` and `docs/PORTFOLIO.md` added. The license is left unchosen: that is the owner's decision.
+
+2026-10-02 (portfolio release): The owner's licensing and repository decisions. No product rule and no API changed.
+
+- **License: MIT**, chosen by the owner. The copyright holder is Wassim Bannout: the name on every commit and in the global Git identity (the GitHub account `WassimBannout` has no display name). Both `composer.json` files now say `MIT` instead of the M00 placeholder `proprietary`.
+- **Third-party file:** the OpenAPI 3.1 schema in `tests/Fixtures/openapi/` keeps its own Apache License 2.0. Its text sits next to it, and the README names the exception.
+- **Repository:** stays private for now. Its description and topics describe only what is implemented. No website until a demo URL exists.
+- **Commit email:** this repository's local Git config uses the owner's GitHub noreply address for future commits. Past commits keep their original author email; the history is not rewritten or force-pushed.
+- **README claims checked against the code**, and five corrected:
+  - the rate provider and the POS make at most three attempts in total, not three retries;
+  - `demo:seed --force` is the production-demo exception to the seeding guard;
+  - the plain error pages have no skip link;
+  - the duplicate-key logging gap already recorded in RELEASE-VERIFICATION is named;
+  - M11 is part of the built milestones.
+
+  In the portfolio notes, "validated caching" became the stored, deduplicated, 72-hour observations.

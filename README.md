@@ -12,12 +12,12 @@ This is a portfolio project. All companies, people, prices and rates are fiction
 
 | | Status |
 | --- | --- |
-| Application | Built in milestones M00–M10 and verified on MySQL 8.4: 593 automated PHP tests and 14 JavaScript tests, run by GitHub Actions on every push ([release verification](docs/RELEASE-VERIFICATION.md)) |
+| Application | Built in milestones M00–M11 and verified on MySQL 8.4: 593 automated PHP tests and 14 JavaScript tests, run by GitHub Actions on every push ([release verification](docs/RELEASE-VERIFICATION.md)) |
 | Production | A production image, a [runbook](docs/RUNBOOK.md) with backup and restore, and a local deployment rehearsal that CI also runs |
 | Live demo | **Not deployed yet.** The hosting, the domain and which demo accounts reviewers get are the owner's decision |
 | Station terminals | Simulated: a separate PHP program plays the POS over HTTP |
 | SQL Server | Not attempted (an optional stretch goal) |
-| License | Not chosen yet |
+| License | [MIT](LICENSE) |
 
 | Dashboard (admin) | Transactions (manager) | Phone |
 | --- | --- | --- |
@@ -133,7 +133,7 @@ Dates are relative to an "as of" clock (default: now). The POS simulator cards `
 - six deliveries covering every status.
 
 - Seed with a chosen clock (empty database only): `docker compose exec app php artisan demo:seed --as-of=2026-09-28T09:00:00Z`
-- Seeding refuses to run outside the `local`/`testing` environment, without `DEMO_MODE=true`, or without a `DEMO_PASSWORD`.
+- Seeding refuses to run without `DEMO_MODE=true` or a `DEMO_PASSWORD`, and outside the `local`/`testing` environment. The one exception is a dedicated production demo deployment, which uses `php artisan demo:seed --force` on its empty database ([runbook](docs/RUNBOOK.md)).
 - Starting over **deletes all local data**: `docker compose exec app php artisan migrate:fresh --seed`. It is deliberately not part of any `make` target.
 
 ## Using the application
@@ -146,7 +146,7 @@ Dates are relative to an "as of" clock (default: now). The POS simulator cards `
   - With JavaScript, a filter change reloads only the results and keeps the filters in the address bar, so reload, back/forward and shared links show the same view. An older, slower answer never overwrites a newer one. Without JavaScript the form still works.
   - While loading, the old results are dimmed; after an error they are replaced by the reason, with **Try again** or **Sign in again**.
 - **Audit log** (admins): who changed what and when, filtered by person, action, record type, company and date. Fields named like credentials are never shown and card numbers are masked.
-- Every page has a "Skip to main content" link, labelled fields whose errors are read out by screen readers, and error pages in plain words (not found, not allowed, session expired, server error).
+- Every page except the plain error pages has a "Skip to main content" link. Fields are labelled, with errors that screen readers announce, and error pages use plain words (not found, not allowed, session expired, server error).
 
 Demo dates are relative to the moment the database was seeded. Early in a month the dashboard shows last month next to the current one, and the transaction list's dates can be widened.
 
@@ -178,7 +178,7 @@ Sign in as `admin@fleetfuel.test` or `manager.atlas@fleetfuel.test`; the sidebar
   docker compose exec app php artisan rates:sync --force   # fetch anyway
   ```
 
-  In fixture mode it stores one synthetic observation per UTC day. In live mode it stores each provider observation once, retries timeouts and 5xx errors at most three times, and leaves stored rates untouched when the provider fails. Page requests never call the provider.
+  In fixture mode it stores one synthetic observation per UTC day. In live mode it stores each provider observation once, makes at most three attempts in total on timeouts and 5xx errors, and leaves stored rates untouched when the provider fails. Page requests never call the provider.
 
 ### Diesel deliveries
 
@@ -289,8 +289,8 @@ API clients (the POS, Postman) use a bearer token, never the browser session:
 - **The past is never repriced.** A purchase stores its price, rate, amounts, vehicle, driver and tank capacity as they were at that moment, and reports add up what was stored.
 - **Failures are explicit.**
   - No valid exchange rate means a 503, not a 1:1 rate.
-  - Contention that outlasts three retries means a 503 with `Retry-After`, and nothing is recorded.
-- **Sensitive changes are audited** with before and after values. Logs never contain passwords, tokens or full card numbers.
+  - Contention that outlasts three attempts means a 503 with `Retry-After`, and nothing is recorded.
+- **Sensitive changes are audited** with before and after values. The application's logs leave out passwords, tokens and full card numbers, and failed queries are logged without their values. One known gap: if two requests race to create the same card number or email, MySQL's duplicate-key message quotes that value ([release verification](docs/RELEASE-VERIFICATION.md)).
 
 More in [the decision log](docs/DECISIONS.md) and [the business rules](docs/04-BUSINESS-RULES.md).
 
@@ -384,4 +384,5 @@ The project was built milestone by milestone with Claude Code. [START_HERE.md](S
 
 - In live mode, exchange rates come from [ExchangeRate-API](https://www.exchangerate-api.com), with attribution on the screens. Fixture mode uses synthetic, labelled rates.
 - All companies, people, cards, prices and rates are fictional.
-- No license has been chosen yet.
+- Licensed under the [MIT License](LICENSE). Copyright (c) 2026 Wassim Bannout.
+- One third-party file is included: `tests/Fixtures/openapi/oas-3.1-schema-2022-10-07.json` is the OpenAPI Initiative's schema, unmodified, under the [Apache License 2.0](tests/Fixtures/openapi/LICENSE-Apache-2.0.txt). Packages installed by Composer and npm keep their own licenses.

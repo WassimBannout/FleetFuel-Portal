@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Portfolio release preparation:
+  - The MIT license (`LICENSE`, both `composer.json` files). The third-party OpenAPI schema fixture keeps its Apache License 2.0, whose text is added next to it.
+  - README claims checked against the code. Corrected: the retry counts (three attempts in total), the production-demo exception to the seeding guard, the skip link's scope, and the known duplicate-key logging gap. One résumé bullet in `docs/PORTFOLIO.md` is made more precise.
+  - The GitHub description and topics are set; the repository stays private.
 - M11 shipping preparation:
   - A production image (`docker/production/Dockerfile`, `make prod-image`):
     - nginx and PHP-FPM in one container, as a non-root user;

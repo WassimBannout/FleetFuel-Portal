@@ -37,24 +37,29 @@ Updated: 2026-10-02
     - 0 vulnerabilities and no advisories;
     - the repeated setup;
     - `make rehearse` "passed in 172 s" (183 s for the step), with Newman 26 + 29 requests and 0 failures, and 24 identical tables after the restore.
-  - The commit that contains this file only records the release assessment (docs). Its CI result is reported in the session reply after the push.
-- **GitHub repository:** private, on a free plan, with no license, description or topics.
+  - The release assessment `921135f` (docs only): GitHub Actions run 36987505864 passed every step in 9 min 8 s (593 tests / 6027 assertions, 14 JavaScript tests, the rehearsal "passed in 182 s").
+  - The commit that contains this file prepares the portfolio release (license, docs, Composer metadata). Its CI result is reported in the session reply after the push.
+- **GitHub repository:** private, on a free plan.
+  - Added on 2026-10-02: the MIT license, a description and 15 topics. No website until a demo URL exists.
   - GitHub refuses branch protection and rulesets for it (HTTP 403, "Upgrade to GitHub Pro or make this repository public").
   - A gitleaks scan of the whole history found no secret (one false positive, the `YOUR-TOKEN` placeholder on the station page).
+  - New commits here use the GitHub noreply address (this repository's local Git config). The 11 earlier commits keep the personal address.
 
 ## Next action
 
-All MVP milestones are complete, locally and in GitHub CI. **The remaining release tasks need the owner's decisions**; none should start without them. Recommended order: the first two are free and quick, and they unblock the third.
+All MVP milestones are complete, locally and in GitHub CI, and the MIT license is in place. **The remaining release tasks need the owner's decisions**; none should start without them.
 
-1. **A license**, the owner's choice; the README says none has been chosen. Choose it before the repository goes public: without one, visitors can read the code but have no permission to reuse it.
-2. **Repository visibility.** The repository is private, so reviewers cannot see it. Making it public publishes the whole history (runbook, "GitHub settings"):
-   - the secrets scan found nothing;
-   - every commit shows the author's email address.
+To make the repository public:
+1. **The 11 earlier commits' email address.** Either accept that the personal address stays visible in them, or rewrite the history to the noreply address. A rewrite needs a force push, which this project has not done and does only on the owner's explicit request. New commits already use the noreply address.
+2. **Making it public**, which is the owner's GitHub action or an explicit request. The secrets scan found nothing, and the README, license, description and topics are ready.
 3. **Branch protection on `main`**, requiring "Setup and quality gates". GitHub allows it only once the repository is public (or on a paid plan).
+
+To deploy:
 4. **Hosting.** Choose a provider and an account that can run a container from this image, with:
    - a durable MySQL 8.4 database;
    - HTTPS termination;
-   - a second process or cron for the scheduler.
+   - a second process or cron for the scheduler;
+   - a URL: the provider's address or your own domain.
 
    Then follow the runbook's "First deployment", run its smoke test and fill in its deployment record. Check the provider's current official limits and costs first; the original research's free-tier claims are not guarantees.
 5. **The public demo policy.** The runbook recommends publishing only the manager accounts and deactivating the admin and operators on the demo database.
@@ -87,7 +92,60 @@ Optional, only on request:
 
 Use TODO / IN PROGRESS / DONE / BLOCKED. A milestone is DONE only when its checks pass. If an external prerequisite blocks one part, record exactly which part and finish independent local work.
 
-## Most recent session: release assessment (after M11)
+## Most recent session: portfolio release preparation
+
+**Date:** 2026-10-02.
+
+**Goal and actual state:**
+- Goal (the owner's prompt):
+  - the MIT license, with the copyright holder confirmed from the Git identity;
+  - the README's license information;
+  - an accurate GitHub description and topics;
+  - the portfolio claims checked against the code;
+  - the GitHub noreply address for this repository's future commits.
+
+  Keep the repository private, preserve the history, no hosting or deployment.
+- **Result:** done. Nothing was deployed or bought, the repository is still private, and no commit was rewritten.
+- At the start: a clean tree, `main` = `origin/main` = `921135f`, and CI run 36987505864 had passed on it.
+
+### Checks: exact command and actual outcome
+
+| Command | Outcome |
+| --- | --- |
+| `git status`, `git rev-parse HEAD origin/main` | Clean; both `921135f` |
+| `git log --all --format=%an`, `git config --global user.name`, `gh api user` | All 11 commits by "Wassim Bannout", and the global Git name is the same. GitHub: login `WassimBannout`, account ID 96440333, no display name, no public email. Copyright holder: **Wassim Bannout** (not ambiguous) |
+| `gh auth status`, `gh api user/emails` | Token scopes `gist`, `read:org`, `repo`, `workflow`. The emails API needs the `user` scope (HTTP 404), so the account's email-privacy setting was not read. The noreply address follows GitHub's format for accounts created after July 2017 (this one: 2021): `<id>+<login>@users.noreply.github.com` |
+| Claim review: README, docs/PORTFOLIO.md and docs/DEMO-SCRIPT.md against the code and tests | **Matched:**<br>PHPStan level 6; the 5/min and 120/min limits; 24-hour tokens; 12-character passwords; the 72-hour windows; the 01:00 UTC schedule;<br>the `(transacted_at, id)` index and the refill SQL;<br>32 seeded purchases and 6 deliveries (`DemoSeederTest`);<br>`[201, 403]` with 15 L each and 20 L left (`PosConcurrencyTest`);<br>6 list queries (`TransactionScreensTest`);<br>every class and test the portfolio notes name; the 100 L card and the simulator's "Result: 5 scenarios passed".<br>**Corrected:**<br>three *attempts*, not retries (`MAX_ATTEMPTS = 3`, `http.attempts = 3`);<br>the `demo:seed --force` exception;<br>the plain error pages have no skip link;<br>"logs never contain card numbers" now names the duplicate-key gap recorded in RELEASE-VERIFICATION;<br>"M00–M10" became M00–M11;<br>"validated caching" made precise |
+| `curl -fsSL https://www.apache.org/licenses/LICENSE-2.0.txt` | 202 lines, complete, SHA-256 `cfc7749b…3d30`. Copied next to the OpenAPI schema fixture |
+| `git config --local user.email` | Set to the noreply address; the global setting is unchanged |
+| `gh repo edit` (description, 15 topics), then `gh repo view` | Private, no website, the new description and topics |
+| `composer validate --strict` for the app and the simulator | Both valid; the lock files are unchanged and still current |
+| `DocumentationParityTest` | **5 passed / 127 assertions** (the new links to `LICENSE` and the Apache text resolve) |
+| `git grep` for "not chosen", "no license", "proprietary" | None left outside the dated logs (PROGRESS, DECISIONS) and the preserved research |
+
+### What changed
+
+- New `LICENSE` (MIT, 2026, Wassim Bannout).
+- New `tests/Fixtures/openapi/LICENSE-Apache-2.0.txt`: the schema fixture's own license.
+- `composer.json` and `tools/pos-simulator/composer.json`: `"license": "MIT"`.
+- `README.md`: the license row and credits (with the third-party exception), plus the five claim corrections.
+- `docs/PORTFOLIO.md`: one résumé bullet made precise.
+- `docs/RUNBOOK.md`: the commit email and the repository details.
+- `docs/DECISIONS.md`: the portfolio-release record.
+- `CHANGELOG.md` and this file.
+- On GitHub: the description and topics. Locally: this repository's commit email.
+
+### Not run or not verified
+
+- The full `make verify` was not run locally: no PHP code changed, and only metadata changed in the Composer files. GitHub CI runs every gate on the pushed commit.
+- The GitHub account's email-privacy setting (it needs a token scope this session does not have).
+- Everything that needs a host or an owner decision: the live deployment, branch protection, the public demo policy and a recording.
+
+**Suggested commit message:** `chore: add the MIT license and prepare the portfolio release`.
+
+**One concept to explain:** a license is what turns "visible" into "reusable". Public code without a license can be read, but copying or adapting it is not allowed. The MIT license grants that permission, keeps the copyright with its holder, and asks only that the notice be kept. It also cannot relicense someone else's file, which is why the Apache-licensed schema keeps its own license.
+
+## Earlier session: release assessment (after M11)
 
 **Date:** 2026-10-02.
 
