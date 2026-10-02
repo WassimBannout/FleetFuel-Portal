@@ -32,9 +32,16 @@ services:
     scheduler:
         <<: *app
         command: ["php", "artisan", "schedule:work"]
-        # No web server in this container, so the image's /up check does not apply.
+        # No web server here, so the image's /up check does not apply. Healthy
+        # while the scheduler is the container's main process (the entrypoint
+        # execs it). A real check also lets `up --wait` include this service.
         healthcheck:
-            disable: true
+            test: ["CMD-SHELL", "grep -q schedule:work /proc/1/cmdline"]
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 10s
+            start_interval: 2s
 
     mysql:
         image: mysql:8.4

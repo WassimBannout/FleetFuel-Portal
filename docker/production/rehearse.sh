@@ -103,7 +103,7 @@ ok "php artisan demo:seed --force (fictional demo data, empty database)"
 
 step "Starting the app and exactly one scheduler"
 quiet compose up -d --wait app scheduler
-ok "app healthy (image health check on /up), scheduler running"
+ok "app healthy (image health check on /up), scheduler healthy (its process check)"
 
 step "HTTP checks on $base"
 [[ "$(curl -s -o /dev/null -w '%{http_code}' "$base/up")" == 200 ]] || fail "/up"

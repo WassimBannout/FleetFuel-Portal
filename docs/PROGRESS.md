@@ -24,7 +24,13 @@ Updated: 2026-10-02
     - 590 tests / 5987 assertions (131.86 s) and 14 JavaScript tests;
     - npm 0 vulnerabilities and a Vite build OK;
     - the repeated-setup step and `make audit` passed.
-  - M11 is committed and pushed in the commit that contains this file. Its CI result, including the first CI run of `make rehearse`, had not been observed when this file was written.
+  - The M11 commit `df58cd6`: GitHub Actions run 36981927462 **failed at the new rehearsal step**. Every other gate passed:
+    - Pint 318 files and Larastan OK twice;
+    - 593 tests / 6027 assertions (110.28 s) and 14 JavaScript tests;
+    - 0 vulnerabilities and no advisories;
+    - the repeated setup.
+
+    On the runner, `docker compose up --wait` refused the scheduler, whose health check was disabled. The fix (a scheduler process check) is in the commit that contains this file. Its CI result had not been observed when this file was written.
 
 ## Next action
 
@@ -138,6 +144,7 @@ PHP commands ran as `docker compose run --rm app …` against the isolated MySQL
 | Deliberate breakages N1–N3 (file changed in place, tests run, file restored and checksum-verified) | **N1**, the trusted-proxy list never applied: `TrustedProxiesTest` and `ProductionBootTest` failed.<br>**N2**, demo seeding in production without `--force`: `DemoSeederTest` failed.<br>**N3**, `SESSION_SECURE_COOKIE=false` in the production boot: `ProductionBootTest` failed |
 | Leftovers after the rehearsals | No rehearsal or restore-check container, volume or network. Images: `fleetfuel-portal:local` and `fleetfuel-app:dev` |
 | The development stack (read-only) | Containers not recreated (up 18 hours, MySQL 3 days); `/health` ok; 36 purchases, 5 users. The running `app` sees the new config files |
+| First CI run of `make rehearse` (run 36981927462, on `df58cd6`) | **Failed** after the image build (587 MB as the runner's image store reports it), the inspection and the release steps. `up --wait app scheduler` stopped with "container fleetfuel-rehearsal-scheduler-1 has no healthcheck configured": the runner's Compose refuses to wait for a service whose health check is disabled. The scheduler now has a process check (`grep -q schedule:work /proc/1/cmdline`), which also fixes the runbook's identical `up --wait` command. Local `make rehearse` #5: **passed in 100 s**, and the scheduler became healthy |
 | After the final `make verify` and rehearsal, two kinds of change | Docs only, plus the `demo:seed` description string ("…empty database (local, or a production demo deployment with --force)"). `DemoSeederTest` + `DocumentationParityTest`: **22 passed / 780 assertions**; Pint PASS. GitHub CI runs every gate and `make rehearse` on the pushed commit |
 
 ### Not run or not verified
@@ -147,7 +154,7 @@ PHP commands ran as `docker compose run --rm app …` against the isolated MySQL
   - no smoke test on a host; the deployment record in the runbook is empty.
 - **GitHub branch protection** was not set: that is the owner's action (instructions in the runbook).
 - **Backups:** the `gpg` encryption step and a backup schedule were not run (no host). A rollback between two real releases was not rehearsed; only one release exists.
-- **GitHub CI for the M11 commit,** including the first CI run of `make rehearse` (reported in the session reply after the push).
+- **GitHub CI for the fix commit** (reported in the session reply after the push). The M11 commit's own run failed only at the rehearsal step (see the table).
 - **No demo recording** was made, and no application email was written or sent (by design).
 - **Carried over:**
   - screen readers and browsers other than Chrome;
