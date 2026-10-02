@@ -226,6 +226,13 @@ CI already runs on every push to `main` and on pull requests (`.github/workflows
 
 To require it before merging: in the repository settings, add a branch rule for `main`. Require a pull request, require the status check "Setup and quality gates", and block force pushes. That cannot be set from this repository's files. Ask before anyone changes it on your behalf.
 
+**Blocked while the repository is private.** On 2026-10-02 the repository was private on a free GitHub plan. GitHub's API refused both branch protection and rulesets for it (HTTP 403: "Upgrade to GitHub Pro or make this repository public to enable this feature"). The rule can be added once the owner makes the repository public or upgrades the plan.
+
+Making the repository public publishes its whole history, not only the current files. Checked on 2026-10-02:
+- **Secrets:** a gitleaks v8.28.0 scan of all 10 commits found one match, a false positive: the `YOUR-TOKEN` placeholder in the station page's curl example. No `.env`, key, dump or backup file was ever committed, only the `.example` templates.
+- **Commit email:** every commit records the author's email address, which becomes public with the history. GitHub's private-email setting and its noreply address protect future commits only. Changing past commits would need a history rewrite and a force push; that is the owner's call and not part of this runbook.
+- **Repository details:** the description, website and topics are empty, and there is no license file. Add the demo URL once it exists.
+
 ## Deployment record
 
 | Field | Value |
@@ -263,4 +270,4 @@ Not verified:
 - the `gpg` encryption step;
 - a rollback between two real releases.
 
-The first CI run of this step is reported after the push, in docs/PROGRESS.md.
+In CI, the first run of this step (run 36981927462, on `df58cd6`) failed at `up --wait`, because the scheduler had no health check. The fix is commit `193f941`. Its run 36983000185 passed every step: the rehearsal reported "passed in 172 s" (183 s for the whole step). The API, restore and restart results matched the table above: Newman 26 and 29 requests with 0 failures, 24 identical tables, 33 purchases before and after the restart.

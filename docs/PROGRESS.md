@@ -30,22 +30,35 @@ Updated: 2026-10-02
     - 0 vulnerabilities and no advisories;
     - the repeated setup.
 
-    On the runner, `docker compose up --wait` refused the scheduler, whose health check was disabled. The fix (a scheduler process check) is in the commit that contains this file. Its CI result had not been observed when this file was written.
+    On the runner, `docker compose up --wait` refused the scheduler, whose health check was disabled.
+  - The fix `193f941` (a scheduler process check): GitHub Actions run 36983000185 **passed every step** in 8 min 36 s. It was the first green CI run of the production rehearsal:
+    - Pint 318 files and Larastan OK twice;
+    - 593 tests / 6027 assertions (130.80 s) and 14 JavaScript tests;
+    - 0 vulnerabilities and no advisories;
+    - the repeated setup;
+    - `make rehearse` "passed in 172 s" (183 s for the step), with Newman 26 + 29 requests and 0 failures, and 24 identical tables after the restore.
+  - The commit that contains this file only records the release assessment (docs). Its CI result is reported in the session reply after the push.
+- **GitHub repository:** private, on a free plan, with no license, description or topics.
+  - GitHub refuses branch protection and rulesets for it (HTTP 403, "Upgrade to GitHub Pro or make this repository public").
+  - A gitleaks scan of the whole history found no secret (one false positive, the `YOUR-TOKEN` placeholder on the station page).
 
 ## Next action
 
-All MVP milestones are complete locally. **The remaining release tasks need the owner's decisions**; none should start without them:
+All MVP milestones are complete, locally and in GitHub CI. **The remaining release tasks need the owner's decisions**; none should start without them. Recommended order: the first two are free and quick, and they unblock the third.
 
-1. **Hosting.** Choose a provider and an account that can run a container from this image, with:
+1. **A license**, the owner's choice; the README says none has been chosen. Choose it before the repository goes public: without one, visitors can read the code but have no permission to reuse it.
+2. **Repository visibility.** The repository is private, so reviewers cannot see it. Making it public publishes the whole history (runbook, "GitHub settings"):
+   - the secrets scan found nothing;
+   - every commit shows the author's email address.
+3. **Branch protection on `main`**, requiring "Setup and quality gates". GitHub allows it only once the repository is public (or on a paid plan).
+4. **Hosting.** Choose a provider and an account that can run a container from this image, with:
    - a durable MySQL 8.4 database;
    - HTTPS termination;
    - a second process or cron for the scheduler.
 
    Then follow the runbook's "First deployment", run its smoke test and fill in its deployment record. Check the provider's current official limits and costs first; the original research's free-tier claims are not guarantees.
-2. **The public demo policy.** The runbook recommends publishing only the manager accounts and deactivating the admin and operators on the demo database.
-3. **A license**, the owner's choice; the README says none has been chosen.
-4. **Branch protection on `main`**, requiring "Setup and quality gates" (runbook, "GitHub settings").
-5. **A demo recording**, following docs/DEMO-SCRIPT.md.
+5. **The public demo policy.** The runbook recommends publishing only the manager accounts and deactivating the admin and operators on the demo database.
+6. **A demo recording**, following docs/DEMO-SCRIPT.md. It is also the fallback evidence while there is no live URL.
 
 Optional, only on request:
 - **S01 SQL Server** (`prompts/12-sql-server-stretch.md`).
@@ -69,12 +82,54 @@ Optional, only on request:
 | M08 Reporting | DONE | T29–T33 on MySQL against the demo seed. Consumption totals per company ID worked out by hand (515.00 L / 41,675,000.00 LBP and 325.00 L / 26,775,000.00 LBP; USD equal to the stored per-purchase sum). Equal names never merge; vehicle grouping follows the purchase snapshot; new prices and rates change nothing. Quota exceptions: a reduced limit, a limit reached exactly, blocked and archived cards; a declined POS purchase adds nothing. Rapid fills: exactly 30 min not flagged, 29:59 flagged, same-second fills by ID, the predecessor read from before the range start, card-only purchases never flagged. Efficiency from recorded readings only. SLA from the history rows. Top stations ties by ID. CSV: tenant and date scope, every row across chunks, the same totals as the ledger list, RFC 4180 quoting and formula neutralization, identical to the browser download. Cross-tenant checks on every report and the export. 11 deliberate breakages all caught. Query plans on 64,032 purchases led to one new index. `make verify`: 544 tests, 5312 assertions |
 | M09 UI polish | DONE | T34 on MySQL and in Chrome. Latest response wins: unit tests with controlled promises, and in the real page with a delayed first answer (a broken build shows the stale result, the real one does not). Totals agree with the CSV for the whole filter, across pages and roles. Loading, empty, error, offline, expired-session and validation states. Keyboard sign-in, skip link, menu and paging. No horizontal page overflow at 390 px on 32 pages. The five-minute walkthrough for all three roles, with the POS simulator. Fixed query counts for the list, dashboard and audit log. 13 deliberate breakages all caught. `make verify`: 580 tests, 5716 assertions (plus 14 JavaScript tests) |
 | M10 Release quality | DONE | T01–T35 mapped to tests (docs/RELEASE-VERIFICATION.md); T35 locally by `ProductionBootTest` (production caches, debug off, real HTTP, a real database failure shown plainly and logged without values), the hosted part in M11. Clean clone in its own Compose project, port and volume next to the running stack: setup, `make verify` (590 tests / 5987 assertions + 14 JS), repeated setup and `make audit` all passed; an unnamed second clone is refused. Five review findings fixed with regression tests; the contention 503 tested; documentation parity tested; 7 deliberate breakages caught. `make verify`: 590 tests, 5972 assertions (plus 14 JavaScript tests) |
-| M11 Shipping/portfolio | DONE (local); live deployment PENDING | A production image (non-root nginx + PHP-FPM, locked `--no-dev` dependencies, compiled assets, no `.env` inside) and a runbook. `make rehearse` passed locally in 108 s: release steps, the `demo:seed --force` guard, healthy app with one scheduler, HTTP checks, form sign-in scoped by tenant, Newman 55 requests / 113 assertions with 0 failures (POS, manager scope, deliveries, reports and CSV, revocation), `rates:sync`, no secrets in the logs, a backup restored into a throwaway server with identical rows and checksums in 24 tables, restart persistence. It found and fixed Debian nginx dropping the port from URLs. `TrustedProxiesTest`, secure cookies and an HTTPS proxy in `ProductionBootTest`; 3 deliberate breakages caught. The live URL, the host smoke test and branch protection are pending the owner. `make verify`: 593 tests, 6027 assertions (plus 14 JavaScript tests) |
+| M11 Shipping/portfolio | DONE (local); live deployment PENDING | A production image (non-root nginx + PHP-FPM, locked `--no-dev` dependencies, compiled assets, no `.env` inside) and a runbook. `make rehearse` passed locally in 108 s: release steps, the `demo:seed --force` guard, healthy app with one scheduler, HTTP checks, form sign-in scoped by tenant, Newman 55 requests / 113 assertions with 0 failures (POS, manager scope, deliveries, reports and CSV, revocation), `rates:sync`, no secrets in the logs, a backup restored into a throwaway server with identical rows and checksums in 24 tables, restart persistence. It found and fixed Debian nginx dropping the port from URLs. `TrustedProxiesTest`, secure cookies and an HTTPS proxy in `ProductionBootTest`; 3 deliberate breakages caught. GitHub CI run 36983000185 passed every gate and the rehearsal on `193f941`. The live URL, the host smoke test and branch protection are pending the owner; GitHub refuses branch protection while the repository is private. `make verify`: 593 tests, 6027 assertions (plus 14 JavaScript tests) |
 | S01 SQL Server | OPTIONAL | Begin only after user requests the stretch |
 
 Use TODO / IN PROGRESS / DONE / BLOCKED. A milestone is DONE only when its checks pass. If an external prerequisite blocks one part, record exactly which part and finish independent local work.
 
-## Most recent session: M11
+## Most recent session: release assessment (after M11)
+
+**Date:** 2026-10-02.
+
+**Goal and actual state:**
+- No MVP milestone was left: the build plan has M00–M11, all DONE, and the optional S01. As the session prompt asks in that case, this session assessed the remaining release tasks.
+- No feature work, no deployment, and nothing published or changed on GitHub.
+- At the start: a clean tree, and `main` = `origin/main` = `193f941`.
+
+### Checks: exact command and actual outcome
+
+| Command | Outcome |
+| --- | --- |
+| `git status`, `git fetch`, `git rev-parse HEAD origin/main`, `gh run list` | Clean; both at `193f941`. Latest run 36983000185 success; the one before, 36981927462 (the M11 commit), failure |
+| `gh run view 36983000185`, the jobs API and the run log | Every step success; 8 min 36 s.<br>Quality gates 169 s: Pint 318 files, Larastan `[OK]` twice, **593 tests / 6027 assertions** (130.80 s), 14 JavaScript tests, 0 vulnerabilities.<br>Repeated setup PASS (12 s); no advisories (3 s).<br>Rehearsal: 183 s for the step, "Rehearsal passed in 172 s" by its own timer. Newman 26 requests / 51 assertions and 29 / 62, 0 failures; all 24 tables identical after the restore; 33 purchases before and after the restart |
+| `grep` of `docs/08-BUILD-PLAN.md`, `ls prompts/` | M00–M11 and S01 (optional) only |
+| `gh repo view` | Private; no description, website, topics or license |
+| `gh api …/branches/main/protection` and `…/rulesets` | **HTTP 403** for both: "Upgrade to GitHub Pro or make this repository public to enable this feature." |
+| `gh release list`, `git tag` | No releases and no tags |
+| `git log --all` identities and added files | 10 commits by one author, with a personal email address. No `.env`, key, dump or backup was ever added; only the three `.example` templates |
+| `gitleaks git /repo --redact` (v8.28.0 in Docker, the repository mounted read-only) | 10 commits, ~2.56 MB, **1 finding**: `curl-auth-header` in `resources/views/station/home.blade.php` (commit `a9bbcc5`). In every commit the value is the placeholder `YOUR-TOKEN`: a false positive |
+| `DocumentationParityTest` after the runbook edits | **5 passed / 127 assertions** |
+| The development stack (read-only) | Containers not recreated (up 19 hours, MySQL 3 days); `/health` `{"status":"ok",…}` |
+
+### What changed
+
+- `docs/RUNBOOK.md`:
+  - "GitHub settings" records the private-repository block and what going public publishes: history scanned, commit email, empty repository details;
+  - the pending CI note is replaced by the actual runs.
+- `CHANGELOG.md`: the scheduler health-check fix, missing from the M11 entry.
+- This file: the current state, the next action (the owner's tasks in a recommended order), the ledger and this log.
+
+### Not run or not verified
+
+- Everything in the M11 list below that needs a host or an owner decision is still pending: no live deployment, branch protection, license, demo policy or recording.
+- No change was made on GitHub (visibility, settings, protection). Each is the owner's action or needs an explicit request.
+- The gitleaks image (`ghcr.io/gitleaks/gitleaks:v8.28.0`) is left on this machine.
+
+**Suggested commit message:** `docs: record the CI result and GitHub release blockers`.
+
+**One concept to explain:** making a repository public publishes its history, not just its current files. A secret removed in a later commit can still be read in the old one, and every commit carries its author's name and email. That is why the scan covered all commits, not only the working tree.
+
+## Earlier session: M11
 
 **Date / milestone:** 2026-10-02, M11 shipping preparation.
 
@@ -154,7 +209,7 @@ PHP commands ran as `docker compose run --rm app …` against the isolated MySQL
   - no smoke test on a host; the deployment record in the runbook is empty.
 - **GitHub branch protection** was not set: that is the owner's action (instructions in the runbook).
 - **Backups:** the `gpg` encryption step and a backup schedule were not run (no host). A rollback between two real releases was not rehearsed; only one release exists.
-- **GitHub CI for the fix commit** (reported in the session reply after the push). The M11 commit's own run failed only at the rehearsal step (see the table).
+- **GitHub CI for the fix commit** was not observed when this log was written. It was checked after the push: run 36983000185 passed every step, including the rehearsal. The M11 commit's own run failed only at the rehearsal step (see the table).
 - **No demo recording** was made, and no application email was written or sent (by design).
 - **Carried over:**
   - screen readers and browsers other than Chrome;

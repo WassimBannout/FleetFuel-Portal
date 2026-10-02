@@ -20,6 +20,7 @@
   - `TRUSTED_PROXIES` for the HTTPS proxy; secure session cookies in the production template; the default database connection is MySQL.
   - `php artisan demo:seed --force` seeds a dedicated production demo deployment (still only with `DEMO_MODE=true` and an empty database).
   - Fixed in the image: Debian's nginx dropped the port from generated URLs (`HTTP_HOST` set to `$host`).
+  - Fixed after the first CI run: the production scheduler has a process health check, so `docker compose up --wait` accepts it on GitHub's runner.
   - The README is rewritten from the implementation. New `docs/DEMO-SCRIPT.md` and `docs/PORTFOLIO.md` (résumé bullets from measured results). The live deployment is pending the owner's hosting decision.
 - M10 release verification:
   - Acceptance cases T01–T35 audited against the tests (docs/RELEASE-VERIFICATION.md); the missing ones now have tests:
