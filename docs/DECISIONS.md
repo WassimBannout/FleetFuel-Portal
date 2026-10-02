@@ -399,3 +399,14 @@ Template: date, affected decision, old/new behavior, reason, spec/test updates, 
   - M11 is part of the built milestones.
 
   In the portfolio notes, "validated caching" became the stored, deduplicated, 72-hour observations.
+
+2026-10-02 (public repository): The owner's publication decisions. No product rule and no API changed.
+
+- **The history stays as it is.** The personal email address remains in the 11 commits before 2026-10-02, and is in no file. The owner chose this over a rewrite, which would have changed every commit hash cited as CI evidence in PROGRESS and needed a force push.
+- **Public:** the owner made the repository public after the pre-publication checks recorded in docs/RUNBOOK.md, "GitHub settings" (history scanned, CI logs without secrets, no issues or artifacts).
+- **Branch protection on `main`:**
+  - a pull request with the "Setup and quality gates" check, on a branch up to date with `main`;
+  - no required approvals, because there is one maintainer and a self-approval would prove nothing;
+  - enforced for administrators;
+  - no force pushes and no deletion.
+- **Merges** are squashed with the noreply address as author, so the commits GitHub creates do not carry the personal address.

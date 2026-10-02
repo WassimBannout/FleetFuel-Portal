@@ -24,6 +24,7 @@ Use `docs/DECISIONS.md` for deliberate changes. The refined specs and API contra
 - Preserve existing work and this handoff. Bootstrap Laravel in a temporary directory and merge carefully into this nonempty root; never delete the kit to make `create-project` work.
 - Routine local implementation and verification are part of the requested milestone. Ask only for a material product decision, credentials, destructive action, or an actual environment permission requirement. Deployment preparation can proceed without account details; document blocked live steps honestly.
 - Do not publish, spend money, send messages, or push to a remote until the user requests that external action. Suggest local commits; commit when requested. Never invent historical commits or reviews.
+- `main` on GitHub is protected (since 2026-10-02): changes reach it only through a pull request that passes "Setup and quality gates", and force pushes are blocked. Merge with the noreply author email (docs/RUNBOOK.md, "GitHub settings").
 
 ## Stack
 

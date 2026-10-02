@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Public repository: the owner made it public, with the history unchanged. `main` is protected: a pull request that passes "Setup and quality gates", no force pushes. The runbook, CLAUDE.md and the README describe the pull-request workflow.
 - Portfolio release preparation:
   - The MIT license (`LICENSE`, both `composer.json` files). The third-party OpenAPI schema fixture keeps its Apache License 2.0, whose text is added next to it.
   - README claims checked against the code. Corrected: the retry counts (three attempts in total), the production-demo exception to the seeding guard, the skip link's scope, and the known duplicate-key logging gap. One résumé bullet in `docs/PORTFOLIO.md` is made more precise.

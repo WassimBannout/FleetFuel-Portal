@@ -38,32 +38,29 @@ Updated: 2026-10-02
     - the repeated setup;
     - `make rehearse` "passed in 172 s" (183 s for the step), with Newman 26 + 29 requests and 0 failures, and 24 identical tables after the restore.
   - The release assessment `921135f` (docs only): GitHub Actions run 36987505864 passed every step in 9 min 8 s (593 tests / 6027 assertions, 14 JavaScript tests, the rehearsal "passed in 182 s").
-  - The commit that contains this file prepares the portfolio release (license, docs, Composer metadata). Its CI result is reported in the session reply after the push.
-- **GitHub repository:** private, on a free plan.
-  - Added on 2026-10-02: the MIT license, a description and 15 topics. No website until a demo URL exists.
-  - GitHub refuses branch protection and rulesets for it (HTTP 403, "Upgrade to GitHub Pro or make this repository public").
-  - A gitleaks scan of the whole history found no secret (one false positive, the `YOUR-TOKEN` placeholder on the station page).
-  - New commits here use the GitHub noreply address (this repository's local Git config). The 11 earlier commits keep the personal address.
+  - The portfolio release `f17b6a4` (license, docs, Composer metadata): GitHub Actions run 36995587998 passed every step (593 tests / 6027 assertions, 14 JavaScript tests, the rehearsal "passed in 179 s").
+  - From here on, `main` changes only through pull requests. The pull request that contains this file reports its CI result in the session reply.
+- **GitHub repository: public since 2026-10-02**, made public by the owner.
+  - The MIT license, a description and 15 topics. No website until a demo URL exists.
+  - **`main` is protected:** a pull request that passes "Setup and quality gates" (on a branch up to date with `main`, no approval required), enforced for administrators, no force pushes or deletion (runbook, "GitHub settings").
+  - Before publication: the history scan found no secret (one false positive, the `YOUR-TOKEN` placeholder), and the 12 CI logs, issues and artifacts held nothing sensitive.
+  - The history is unchanged: the 11 commits before 2026-10-02 keep the personal address. New commits use the GitHub noreply address (this repository's local Git config).
 
 ## Next action
 
-All MVP milestones are complete, locally and in GitHub CI, and the MIT license is in place. **The remaining release tasks need the owner's decisions**; none should start without them.
+All MVP milestones are complete, locally and in GitHub CI. The repository is public under the MIT license, and `main` is protected. **The remaining release tasks are about deployment, and they need the owner's decisions**; none should start without them:
 
-To make the repository public:
-1. **The 11 earlier commits' email address.** Either accept that the personal address stays visible in them, or rewrite the history to the noreply address. A rewrite needs a force push, which this project has not done and does only on the owner's explicit request. New commits already use the noreply address.
-2. **Making it public**, which is the owner's GitHub action or an explicit request. The secrets scan found nothing, and the README, license, description and topics are ready.
-3. **Branch protection on `main`**, requiring "Setup and quality gates". GitHub allows it only once the repository is public (or on a paid plan).
-
-To deploy:
-4. **Hosting.** Choose a provider and an account that can run a container from this image, with:
+1. **Hosting.** Choose a provider and an account that can run a container from this image, with:
    - a durable MySQL 8.4 database;
    - HTTPS termination;
    - a second process or cron for the scheduler;
    - a URL: the provider's address or your own domain.
 
    Then follow the runbook's "First deployment", run its smoke test and fill in its deployment record. Check the provider's current official limits and costs first; the original research's free-tier claims are not guarantees.
-5. **The public demo policy.** The runbook recommends publishing only the manager accounts and deactivating the admin and operators on the demo database.
-6. **A demo recording**, following docs/DEMO-SCRIPT.md. It is also the fallback evidence while there is no live URL.
+2. **The public demo policy.** The runbook recommends publishing only the manager accounts and deactivating the admin and operators on the demo database.
+3. **A demo recording**, following docs/DEMO-SCRIPT.md. It is also the fallback evidence while there is no live URL.
+
+Every change now goes through a pull request (CLAUDE.md, docs/RUNBOOK.md "GitHub settings").
 
 Optional, only on request:
 - **S01 SQL Server** (`prompts/12-sql-server-stretch.md`).
@@ -92,7 +89,48 @@ Optional, only on request:
 
 Use TODO / IN PROGRESS / DONE / BLOCKED. A milestone is DONE only when its checks pass. If an external prerequisite blocks one part, record exactly which part and finish independent local work.
 
-## Most recent session: portfolio release preparation
+## Most recent session: public repository and branch protection
+
+**Date:** 2026-10-02.
+
+**Goal and actual state:**
+- The owner chose to keep the history unchanged and make the repository public, then protect `main`.
+- **Result:** done.
+  - The owner switched the visibility themselves: Claude Code's permission check refused that action for the assistant, and it was not retried another way.
+  - Branch protection was set through the GitHub API.
+  - These docs go in through the first pull request.
+- Nothing was deployed or bought, and no commit was rewritten.
+
+### Checks: exact command and actual outcome
+
+| Command | Outcome |
+| --- | --- |
+| `git log --all` metadata, `git grep` and `git log -p` for the personal address | Author and committer of 11 of the 12 commits. In no file, current or past |
+| `.github/workflows/` for `secrets.`; the logs of all 12 CI runs (jobs API); issues, pull requests, artifacts | No secrets used; **0** password, application-key or token values in 2,775–3,483 lines per log; 0 issues, 0 pull requests, 0 artifacts. (`gh run view --log` returned an empty file for one run; the jobs API returned the full log) |
+| `gh repo edit --visibility public` by the assistant | **Refused** by Claude Code's auto-mode permission check ("Create Public Surface"). The owner changed it in GitHub |
+| Signed out: `curl` of the API, the repository page, the raw `LICENSE` and the CI badge | `private=false visibility=public license=MIT`, 15 topics; page 200; `LICENSE` 200; badge 200 `image/svg+xml` |
+| `gh api …/commits/f17b6a4/check-runs` | "Setup and quality gates", GitHub Actions (app 15368), success |
+| `gh api -X PUT …/branches/main/protection`, then `…/branches/main` | Strict required check "Setup and quality gates", a pull request with 0 approvals, enforced for administrators, force pushes and deletion off; `protected=true` |
+| `DocumentationParityTest` after the docs edits | **5 passed / 127 assertions** |
+
+### What changed
+
+- **On GitHub:** public (by the owner), and the protection rule.
+- **`docs/RUNBOOK.md`:** "GitHub settings" describes the live rule, the pull-request workflow, the noreply merge author and the pre-publication checks.
+- **`CLAUDE.md`:** `main` changes only through pull requests.
+- **`README.md`:** the CI row mentions pull requests and the protected branch.
+- **`docs/DECISIONS.md`, `CHANGELOG.md` and this file.**
+
+### Not run or not verified
+
+- A direct push to `main` was not attempted to prove the rule. The rule was read back from the API, and this pull request is the first change under it.
+- Hosting, the demo policy and the recording: still the owner's decisions.
+
+**Suggested commit message:** `docs: record the public repository and branch protection`.
+
+**One concept to explain:** branch protection turns a habit into a rule. Before it, "run CI before changing `main`" was a promise. Now GitHub refuses any change to `main` that has not passed the same checks in a pull request, including the owner's own changes and force pushes that would rewrite published history.
+
+## Earlier session: portfolio release preparation
 
 **Date:** 2026-10-02.
 
