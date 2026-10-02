@@ -95,6 +95,7 @@ The Composer container must run on the chosen PHP version with matching extensio
 | `make verify` | Run lint, static analysis, tests and build, fail if any fails |
 | `make logs` | Show useful service logs without dumping env/secrets |
 | `make simulate` | Added in M06: run the standalone POS simulator against the running stack; credentials only from `POS_*` environment variables |
+| `make prod-image` / `make rehearse` | Added in M11: build the production image (`docker/production/Dockerfile`) / deploy it locally with disposable data in its own Compose project, test it end to end, back up and restore, then remove it (docs/RUNBOOK.md) |
 | `make audit` | Added in M10: check the locked Composer (app and simulator) and npm dependencies against published security advisories. Outside `verify`, because it needs the network and its answer changes when new advisories are published; CI runs it as its own step |
 
 `make setup`, `make up` and `make test` first check that this checkout owns its Compose project (`docker/bin/check-compose-project.sh`). A second copy on the same machine sets its own `COMPOSE_PROJECT_NAME` and `APP_PORT` (M10).

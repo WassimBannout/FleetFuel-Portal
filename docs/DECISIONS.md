@@ -363,3 +363,23 @@ Template: date, affected decision, old/new behavior, reason, spec/test updates, 
 - The local disk's `serve` option is off: the app stores no files, so its signed download and upload routes (`storage/{path}`, observed as unused in M02) are no longer registered. Every route except `GET /`, `GET`/`POST /login`, `GET /up`, `GET /health` and `POST /api/v1/auth/token` must refuse a guest; a test requests each one.
 - `make audit` checks the Composer (app and simulator) and npm lockfiles against published advisories. It is not part of `make verify`, because it needs the network and its result changes when new advisories appear; CI runs it as a separate step. Patch releases without advisories are not applied during release verification.
 - T35 is tested in-process with PHP's built-in server: production environment, debug off, `php artisan optimize` caches in a temporary directory (`APP_*_CACHE`, `VIEW_COMPILED_PATH`), a dedicated test database. A production image and host are M11.
+
+2026-10-02 (M11): Shipping preparation. No product rule changed. The production commands are in docs/RUNBOOK.md, and `make rehearse` verifies them.
+
+- **Production image** (`docker/production/Dockerfile`), D20/D21:
+  - one container runs nginx and PHP-FPM side by side as the non-root user `app` (UID 10001), so any container host can run it, not only multi-container ones;
+  - the entrypoint starts both and exits when either stops, so the host restarts the container. It runs `php artisan optimize` from the environment on every start and never migrates or seeds;
+  - the code is root-owned and read-only for `app`;
+  - the build stages install locked `--no-dev` Composer packages and build the Vite assets; Composer, git and Node are not in the final image;
+  - `.dockerignore` keeps env files, tests, docs and tools out of the build context.
+- **nginx** passes the client's Host header unchanged. Debian's `fastcgi_params` (nginx 1.26) sets `HTTP_HOST` to `$host` as a security workaround, which dropped the port from every generated URL: the rehearsal's sign-in redirect went to `http://127.0.0.1/dashboard`. nginx 1.30's `$request_port` would fix it properly, but trixie ships 1.26. So the production config lists the standard FastCGI parameters itself, matching the official nginx image used in development. Forged Host headers stay low-risk here:
+  - the app has no password-reset links and no caching layer;
+  - behind the HTTPS proxy, only `TRUSTED_PROXIES` may set the forwarded host.
+- **`TRUSTED_PROXIES`** (config `fleetfuel.trusted_proxies`, applied with `TrustProxies::at()` in `AppServiceProvider`): `X-Forwarded-*` headers are believed only from the listed addresses. The production template sets `SESSION_SECURE_COOKIE=true`.
+- **The default connection is now `mysql`**, not the skeleton's `sqlite`. A deployment that forgets `DB_CONNECTION` must fail against MySQL, not fall back to SQLite (D03).
+- **Demo data in production:** `php artisan demo:seed --force` is allowed in the `production` environment, for a dedicated public-demo deployment. It still needs `DEMO_MODE=true`, a `DEMO_PASSWORD` and an empty database. Without `--force`, and in any other environment except local and testing, it refuses; `db:seed` never seeds demo data in production. Which accounts the public gets is the owner's decision. The runbook recommends deactivating the admin and the operators on a public demo.
+- **`compose.production.yaml`** is the reference single-host stack: `app`, exactly one `scheduler` and `mysql`, with no bind mounts. MySQL's settings come from command-line flags instead of a mounted file. `FLEETFUEL_IMAGE` and `FLEETFUEL_ENV_FILE` select the image and the env file.
+- **Backups:** `backup.sh` runs `mysqldump --single-transaction` with the application's own account, and the password goes through `MYSQL_PWD`, never the command line.
+- **Restore checks:** `restore-check.sh` restores into a throwaway MySQL server and checks the copy with the production image (`migrate:status`, `usage:reconcile`, row counts and `CHECKSUM TABLE`). Encryption and off-host storage are the operator's steps; the runbook gives a `gpg` command, which was not run here.
+- **`make rehearse`** (also a CI step) deploys the image locally in the `fleetfuel-rehearsal` Compose project with generated secrets, tests it end to end and removes everything. It uses `SESSION_SECURE_COOKIE=false`, because it is plain HTTP on 127.0.0.1.
+- **README** replaced with an implementation-based one. `docs/DEMO-SCRIPT.md` and `docs/PORTFOLIO.md` added. The license is left unchosen: that is the owner's decision.

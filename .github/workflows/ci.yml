@@ -41,6 +41,12 @@ jobs:
       - name: Dependency security advisories
         run: make audit
 
+      # Builds the production image and deploys it with disposable data in a
+      # separate Compose project: release steps, sign-in, POS, deliveries,
+      # reports, backup and restore (docs/RUNBOOK.md). Removes itself.
+      - name: Production deployment rehearsal
+        run: make rehearse
+
       - name: Service logs
         if: failure()
         run: make logs

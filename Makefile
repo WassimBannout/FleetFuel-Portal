@@ -23,10 +23,10 @@ CHECK_READY := $(COMPOSE) exec -T web wget -q -O /dev/null http://127.0.0.1/heal
 # Stops before a second checkout takes over this project's containers and volume.
 CHECK_PROJECT := sh docker/bin/check-compose-project.sh
 
-.PHONY: help setup up down test lint analyse build verify audit simulate logs shell
+.PHONY: help setup up down test lint analyse build verify audit prod-image rehearse simulate logs shell
 
 help: ## List the available commands
-	@grep -E '^[a-z]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  make %-8s %s\n", $$1, $$2}'
+	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  make %-10s %s\n", $$1, $$2}'
 
 setup: ## Build, install, migrate and start; safe to repeat (keeps .env, key and data)
 	sh docker/bin/prepare-env.sh
@@ -84,6 +84,13 @@ audit: ## Check the locked Composer and npm dependencies against published secur
 	$(PHP) composer audit --locked
 	$(PHP) composer audit --locked --working-dir=tools/pos-simulator
 	$(NODE) npm audit --audit-level=low
+
+# Production (M11, docs/RUNBOOK.md). Neither target touches the development stack.
+prod-image: ## Build the production image fleetfuel-portal:local (docker/production/Dockerfile)
+	docker build -f docker/production/Dockerfile -t fleetfuel-portal:local .
+
+rehearse: ## Rehearse a production deployment locally with disposable data, then remove it
+	bash docker/production/rehearse.sh
 
 # The simulator reaches nginx as http://web inside the Compose network. Its
 # credentials are passed through from your shell environment only

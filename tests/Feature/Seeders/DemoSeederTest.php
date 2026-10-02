@@ -26,6 +26,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use PHPUnit\Framework\Attributes\DataProvider;
+use RuntimeException;
 use Tests\Concerns\BuildsLedgerFixtures;
 use Tests\TestCase;
 
@@ -296,7 +297,39 @@ class DemoSeederTest extends TestCase
             ->expectsOutputToContain('only be seeded in the local or testing environment')
             ->assertFailed();
 
+        // The ordinary seeder never seeds production demo data either; it stops with the guidance.
+        try {
+            $this->artisan('db:seed', ['--force' => true])->run();
+            $this->fail('db:seed seeded demo data in production.');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('demo:seed --force', $e->getMessage());
+        }
+
+        // --force is for a production demo deployment only, not any other environment.
+        $this->app->detectEnvironment(fn (): string => 'staging');
+        $this->artisan('demo:seed', ['--force' => true])
+            ->expectsOutputToContain('only be seeded in the local or testing environment')
+            ->assertFailed();
+
         $this->assertSame(0, User::query()->count());
+    }
+
+    /** A production deployment that serves as a public demo seeds through an explicit --force. */
+    public function test_a_production_demo_deployment_seeds_only_with_force(): void
+    {
+        $this->app->detectEnvironment(fn (): string => 'production');
+
+        config(['fleetfuel.demo.enabled' => false, 'fleetfuel.demo.password' => self::DEMO_PASSWORD]);
+        $this->artisan('demo:seed', ['--force' => true])->expectsOutputToContain('DEMO_MODE is off')->assertFailed();
+        $this->assertSame(0, User::query()->count());
+
+        config(['fleetfuel.demo.enabled' => true]);
+        $this->artisan('demo:seed', ['--force' => true, '--as-of' => self::FIXTURE_NOW])->assertSuccessful();
+        $this->assertSame(5, User::query()->count());
+
+        // Still only into an empty database: a second run changes nothing.
+        $this->artisan('demo:seed', ['--force' => true])->expectsOutputToContain('already has users')->assertSuccessful();
+        $this->assertDatabaseCount('users', 5);
     }
 
     public function test_it_refuses_without_demo_mode_or_a_demo_password(): void

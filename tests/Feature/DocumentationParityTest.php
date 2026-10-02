@@ -92,7 +92,8 @@ class DocumentationParityTest extends TestCase
         foreach ($this->documents() as $document => $markdown) {
             preg_match_all('#http://localhost:8080(/[^\s)>`"\']*)?#', $markdown, $found);
             foreach ($found[1] as $path) {
-                $path = '/'.trim((string) strtok($path, '?#'), '/');
+                // A sentence's full stop after a URL is not part of it.
+                $path = '/'.trim(rtrim((string) strtok($path, '?#'), '.,;:!?'), '/');
                 if ($path === '/api/v1') {
                     continue;
                 }

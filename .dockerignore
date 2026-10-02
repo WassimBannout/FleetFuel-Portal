@@ -1,0 +1,42 @@
+# Build context of the production image (docker/production/Dockerfile). The
+# development image builds from docker/php and is not affected.
+
+# Secrets and local state never enter an image.
+.env
+.env.*
+**/*.local.json
+backups
+storage/logs/*
+storage/framework/cache/data/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/framework/testing/*
+storage/app/private/*
+bootstrap/cache/*.php
+
+# Installed or built inside the image from the lockfiles.
+vendor
+node_modules
+public/build
+public/hot
+
+# Not needed at run time.
+.git
+.github
+.claude
+.idea
+.vscode
+.phpunit.cache
+.phpunit.result.cache
+coverage
+tests
+docs
+prompts
+postman
+tools
+scripts
+*.md
+compose*.yaml
+Makefile
+phpunit.xml
+phpstan.neon

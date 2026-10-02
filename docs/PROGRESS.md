@@ -1,59 +1,52 @@
 # Progress and session handoff
 
-Updated: 2026-10-01
+Updated: 2026-10-02
 
 ## Current state
 
-- **M10 Release verification is DONE**, on top of M00–M09. Every applicable acceptance case T01–T35 is mapped to tests in [docs/RELEASE-VERIFICATION.md](RELEASE-VERIFICATION.md). That page also holds the quality gates, the clean-clone rehearsal, the review findings and the limitations.
-  - **New tests:**
-    - T35, the app booting from production caches with debug off;
-    - the contention 503 behind a held card lock;
-    - a guest sweep over every route;
-    - documentation parity (make targets, Artisan commands, endpoints, local URLs, links).
-  - **Fixed:**
-    - failed-query log messages contained bound values (card numbers, emails, session IDs);
-    - the demo seed's audit name `fuel_card.limits_changed`;
-    - a second clone taking over the first one's containers and volume;
-    - the undocumented `Retry-After` on the contention 503;
-    - two unused public storage routes.
-  - **New command:** `make audit` (Composer and npm advisories), also a CI step.
-  - **New docs:** [docs/DEBUGGING-STORY.md](DEBUGGING-STORY.md) and [docs/M10-PULL-REQUEST.md](M10-PULL-REQUEST.md).
-- **Dev database:** M10 changed no data in it (36 purchases and 5 users before and after the rehearsal). Its earlier seeded `fuel_card.limits_changed` audit row stays: audit history is not rewritten.
-  - The running dev containers already see the M10 files: the new config and service code were checked inside `app` and `scheduler`, and no storage route is registered. So no restart is needed.
-  - `make setup`, `make up` and `make test` now run a quick project check first.
+- **All MVP milestones M00–M11 are DONE locally.** M11 shipping preparation added:
+  - **A production image** (`docker/production/Dockerfile`, `make prod-image`):
+    - nginx and PHP-FPM in one container, as a non-root user;
+    - locked production dependencies and compiled assets;
+    - configuration from the environment, cached on start; no migration on start.
+  - **A reference stack** (`compose.production.yaml`) and the env template `.env.production.example`.
+  - **A full local deployment rehearsal** (`make rehearse`, also a CI step). It covers the release steps, sign-in, the Postman POS, delivery, report and CSV scenarios, the scheduler and logs, a backup restored and compared table by table, and a restart.
+  - **[docs/RUNBOOK.md](RUNBOOK.md):** deployment, releases, rollback, scheduler, backups, restore, failure handling, the demo policy, GitHub settings.
+  - **An implementation-based README,** [docs/DEMO-SCRIPT.md](DEMO-SCRIPT.md) and [docs/PORTFOLIO.md](PORTFOLIO.md).
+  - **`TRUSTED_PROXIES`,** secure cookies in the production template, and a `mysql` default connection.
+  - **`demo:seed --force`** for a dedicated production demo deployment.
+- **Live deployment: pending.** No host has been chosen, and nothing was deployed or published. The deployment record in the runbook is empty.
+- **Dev database:** M11 changed no data in it (36 purchases, 5 users). The running containers already see the changed config files, so no restart is needed.
 - **Local URLs:** <http://localhost:8080> (sign-in `/login`, dashboard `/dashboard`, transactions `/transactions`, audit `/audit`, reports `/reports`, readiness `/health`, liveness `/up`, API base `/api/v1`).
 - **Git:** branch `main` tracks `origin/main` (github.com/WassimBannout/FleetFuel-Portal).
-  - M09 is `a4c1ea0`. GitHub Actions run 36874363104 passed on it (4 min 46 s):
-    - Pint PASS on 315 files and Larastan OK twice;
-    - 580 tests / 5716 assertions (109.60 s) and 14 JavaScript tests;
+  - M10 is `fd739b2`. GitHub Actions run 36914194485 passed on it (5 min 27 s):
+    - Pint PASS on 317 files and Larastan OK twice;
+    - 590 tests / 5987 assertions (131.86 s) and 14 JavaScript tests;
     - npm 0 vulnerabilities and a Vite build OK;
-    - the repeated-setup step passed.
-  - M10 is committed and pushed in the commit that contains this file. Its CI result had not been observed when this file was written.
+    - the repeated-setup step and `make audit` passed.
+  - M11 is committed and pushed in the commit that contains this file. Its CI result, including the first CI run of `make rehearse`, had not been observed when this file was written.
 
 ## Next action
 
-Execute `prompts/11-shipping-portfolio.md` (M11). Prepare and verify locally first, then ask for the outward-facing decisions:
-- **Local work:**
-  - a production image (locked `--no-dev` Composer, compiled assets, no source bind mount, non-root);
-  - deploy, rollback, scheduler, and backup-and-restore runbooks, with a restore into a disposable database;
-  - the implementation-based README;
-  - the demo script;
-  - truthful résumé bullets from the measured numbers.
-- **Needs your decision before anything is published:**
-  - a hosting provider and account;
-  - the public demo policy (which accounts reviewers get);
-  - the license.
+All MVP milestones are complete locally. **The remaining release tasks need the owner's decisions**; none should start without them:
 
-  Nothing is deployed or published until you ask.
+1. **Hosting.** Choose a provider and an account that can run a container from this image, with:
+   - a durable MySQL 8.4 database;
+   - HTTPS termination;
+   - a second process or cron for the scheduler.
 
-Starting points from M10:
-- **T35's hosted part:** HTTPS, secure cookies, trusted proxies and a real host's smoke test. `ProductionBootTest` covers only the application's production boot.
-- **A production image** can reuse `ProductionBootTest`'s settings: `php artisan optimize`, `APP_DEBUG=false`, logs to stderr.
-- **Carried over:**
-  - MySQL duplicate-key messages quote the duplicated value;
-  - the phone-overflow guard is manual (Chrome);
-  - the simulator with a host PHP outside Docker;
-  - SQL Server (S01).
+   Then follow the runbook's "First deployment", run its smoke test and fill in its deployment record. Check the provider's current official limits and costs first; the original research's free-tier claims are not guarantees.
+2. **The public demo policy.** The runbook recommends publishing only the manager accounts and deactivating the admin and operators on the demo database.
+3. **A license**, the owner's choice; the README says none has been chosen.
+4. **Branch protection on `main`**, requiring "Setup and quality gates" (runbook, "GitHub settings").
+5. **A demo recording**, following docs/DEMO-SCRIPT.md.
+
+Optional, only on request:
+- **S01 SQL Server** (`prompts/12-sql-server-stretch.md`).
+- Later improvements from the limitations:
+  - a Content-Security-Policy;
+  - browser end-to-end tests (for example, for the phone-overflow regression);
+  - an automated accessibility audit.
 
 ## Milestone ledger
 
@@ -70,12 +63,131 @@ Starting points from M10:
 | M08 Reporting | DONE | T29–T33 on MySQL against the demo seed. Consumption totals per company ID worked out by hand (515.00 L / 41,675,000.00 LBP and 325.00 L / 26,775,000.00 LBP; USD equal to the stored per-purchase sum). Equal names never merge; vehicle grouping follows the purchase snapshot; new prices and rates change nothing. Quota exceptions: a reduced limit, a limit reached exactly, blocked and archived cards; a declined POS purchase adds nothing. Rapid fills: exactly 30 min not flagged, 29:59 flagged, same-second fills by ID, the predecessor read from before the range start, card-only purchases never flagged. Efficiency from recorded readings only. SLA from the history rows. Top stations ties by ID. CSV: tenant and date scope, every row across chunks, the same totals as the ledger list, RFC 4180 quoting and formula neutralization, identical to the browser download. Cross-tenant checks on every report and the export. 11 deliberate breakages all caught. Query plans on 64,032 purchases led to one new index. `make verify`: 544 tests, 5312 assertions |
 | M09 UI polish | DONE | T34 on MySQL and in Chrome. Latest response wins: unit tests with controlled promises, and in the real page with a delayed first answer (a broken build shows the stale result, the real one does not). Totals agree with the CSV for the whole filter, across pages and roles. Loading, empty, error, offline, expired-session and validation states. Keyboard sign-in, skip link, menu and paging. No horizontal page overflow at 390 px on 32 pages. The five-minute walkthrough for all three roles, with the POS simulator. Fixed query counts for the list, dashboard and audit log. 13 deliberate breakages all caught. `make verify`: 580 tests, 5716 assertions (plus 14 JavaScript tests) |
 | M10 Release quality | DONE | T01–T35 mapped to tests (docs/RELEASE-VERIFICATION.md); T35 locally by `ProductionBootTest` (production caches, debug off, real HTTP, a real database failure shown plainly and logged without values), the hosted part in M11. Clean clone in its own Compose project, port and volume next to the running stack: setup, `make verify` (590 tests / 5987 assertions + 14 JS), repeated setup and `make audit` all passed; an unnamed second clone is refused. Five review findings fixed with regression tests; the contention 503 tested; documentation parity tested; 7 deliberate breakages caught. `make verify`: 590 tests, 5972 assertions (plus 14 JavaScript tests) |
-| M11 Shipping/portfolio | TODO | Depends on M10; live deployment may need user account |
+| M11 Shipping/portfolio | DONE (local); live deployment PENDING | A production image (non-root nginx + PHP-FPM, locked `--no-dev` dependencies, compiled assets, no `.env` inside) and a runbook. `make rehearse` passed locally in 108 s: release steps, the `demo:seed --force` guard, healthy app with one scheduler, HTTP checks, form sign-in scoped by tenant, Newman 55 requests / 113 assertions with 0 failures (POS, manager scope, deliveries, reports and CSV, revocation), `rates:sync`, no secrets in the logs, a backup restored into a throwaway server with identical rows and checksums in 24 tables, restart persistence. It found and fixed Debian nginx dropping the port from URLs. `TrustedProxiesTest`, secure cookies and an HTTPS proxy in `ProductionBootTest`; 3 deliberate breakages caught. The live URL, the host smoke test and branch protection are pending the owner. `make verify`: 593 tests, 6027 assertions (plus 14 JavaScript tests) |
 | S01 SQL Server | OPTIONAL | Begin only after user requests the stretch |
 
 Use TODO / IN PROGRESS / DONE / BLOCKED. A milestone is DONE only when its checks pass. If an external prerequisite blocks one part, record exactly which part and finish independent local work.
 
-## Most recent session: M10
+## Most recent session: M11
+
+**Date / milestone:** 2026-10-02, M11 shipping preparation.
+
+**Goal and actual state:**
+- Goal (prompts/11-shipping-portfolio.md): prepare and verify locally:
+  - a production image;
+  - deploy, rollback, scheduler, and backup-and-restore runbooks;
+  - the actual README and screenshots;
+  - a demo script and truthful résumé bullets.
+
+  Finish the concrete release candidate before asking for hosting, account or publishing decisions, and publish only when asked.
+- **Result:** done locally.
+  - The production image, the runbook, backup and restore, and a full deployment rehearsal are built, and verified with disposable data.
+  - The README, the demo script and the portfolio notes are written from measured results.
+- **The live deployment is pending.** No host has been chosen; that is the owner's decision. Nothing was deployed or published.
+- M10 had nothing outstanding: the tree was clean, `main` matched `origin/main` at `fd739b2`, and GitHub CI run 36914194485 had passed on it (observed at the end of M10).
+
+### What was built
+
+- **Production image:**
+  - `docker/production/Dockerfile` (stages: PHP base, `vendor`, `assets`, `app`);
+  - `docker/production/{entrypoint.sh, nginx.conf, php.ini, php-fpm.conf}`;
+  - `.dockerignore`.
+- **Stack and settings:**
+  - `compose.production.yaml`;
+  - `.env.production.example`, whitelisted in `.gitignore`;
+  - `config/fleetfuel.php` gained `trusted_proxies`;
+  - `AppServiceProvider::configureTrustedProxies()`;
+  - `config/database.php`: the default connection is `mysql`.
+- **Demo seeding:** `demo:seed --force`, through `SeedDemoData` and `DemoSeeder::run($asOf, $hostedDemo)`.
+- **Operations:**
+  - `docker/production/backup.sh`, `restore-check.sh` and `rehearse.sh`;
+  - Makefile targets `prod-image` and `rehearse` (and `make help` now lists hyphenated targets);
+  - CI step "Production deployment rehearsal".
+- **Tests:**
+  - new: `tests/Feature/TrustedProxiesTest.php` (2);
+  - `DemoSeederTest`: one new test, one extended;
+  - `ProductionBootTest`: HTTPS through a trusted proxy, and a `Secure` + `HttpOnly` session cookie;
+  - `DocumentationParityTest`: a URL's trailing sentence punctuation is ignored.
+- **Docs:**
+  - new `docs/RUNBOOK.md`, `docs/DEMO-SCRIPT.md` and `docs/PORTFOLIO.md`;
+  - the README rewritten from the implementation;
+  - START_HERE status;
+  - `docs/02-ARCHITECTURE.md` (commands), `docs/09-OPERATIONS-AND-PORTFOLIO.md` (an outdated opening paragraph), RELEASE-VERIFICATION (a pointer to M11);
+  - DECISIONS (the M11 record), CHANGELOG, this file.
+
+### Checks: exact command and actual outcome
+
+PHP commands ran as `docker compose run --rm app …` against the isolated MySQL test databases, unless stated otherwise.
+
+| Command | Outcome |
+| --- | --- |
+| `git status`, `git log` at the start | Clean tree; `main` at `fd739b2` = `origin/main` |
+| `docker build -f docker/production/Dockerfile -t fleetfuel-portal:local .`, first build | exit 0. 846 MB unpacked (`docker images`), 201 MB compressed (`docker image inspect`, containerd store) |
+| Inspecting the image (`docker run --entrypoint bash …`) | Inside:<br>user 10001 `app`;<br>no dev packages, `.env`, tests, docs, tools, `node_modules` or `.git`;<br>no Composer or git;<br>code not writable, `storage` and `bootstrap/cache` writable;<br>`nginx -t` and `php-fpm -t` OK;<br>all extensions loaded; `opcache.validate_timestamps=0` |
+| The image started with environment variables only and no database | `/up` 200; `/health` 503 `{"status":"unavailable",…}`; security headers; assets cached for a year; `docker stop` in 1.2 s.<br>**Found:** with `DB_CONNECTION` unset, the skeleton's default fell back to SQLite. The default is now `mysql` |
+| `DemoSeederTest` after the `--force` change | **1 failed:** my test expected a failed exit code from `db:seed`, but the seeder's refusal is an exception. It now asserts the exception and its guidance. Then **17 passed / 653 assertions** |
+| `TrustedProxiesTest`, first run | **1 failed:** an untrusted address appeared to be believed. Reproduced outside PHPUnit, where it behaves correctly. The cause was the test client: it builds the next request's absolute URL with `url()`, which still held the previous request's forwarded https host. The test now requests `http://localhost/login` explicitly. Then **2 passed / 8 assertions** |
+| `ProductionBootTest` with the proxy and cookie checks | Passed. Changing `TRUSTED_PROXIES` to `10.9.9.9` once made it fail at the https assertion, so the check runs |
+| `make rehearse` #1 | Every step passed up to web sign-in, which **failed**: it redirected to `http://127.0.0.1/dashboard`, without the port. Debian's nginx 1.26 `fastcgi_params` sets `HTTP_HOST $host` as a security workaround. The production config now lists the standard parameters, so the client's Host header passes unchanged. A standalone probe then showed `http://127.0.0.1:8095/login` |
+| `make rehearse` #2 | Sign-in passed. **Failed** at Newman: `--no-color` is not a Newman 6 option. Changed to `--color off` |
+| `make rehearse` #3 | **Passed in 98 s** |
+| Larastan | 1 error: a repeated `User::query()->count()` was treated as always true. That check now uses `assertDatabaseCount` |
+| `DocumentationParityTest` over the new docs | **1 failed:** `http://localhost:8080/login.` with the sentence's full stop. The test now ignores trailing punctuation. Then **5 passed / 127 assertions** |
+| `make verify` | exit 0 in 3 min 53 s:<br>Pint PASS on 318 files;<br>Larastan `[OK] No errors` and simulator PHPStan `[OK] No errors`;<br>**593 tests / 6027 assertions** (191.07 s);<br>`npm test` 14 passed;<br>npm 0 vulnerabilities;<br>Vite build OK |
+| `make rehearse` #4, on the same tree | **Passed in 108 s.** Image built in 11 s from cache (201 MB compressed) and inspected.<br>Release steps: `migrate --force`; `demo:seed` without `--force` refused, with `--force` seeded.<br>App healthy with one scheduler.<br>HTTP checks; form sign-in scoped to Atlas.<br>Newman: **26 requests / 51 assertions** (folders 01, 02, 05) and **29 / 62** (03, 04), 0 failures; `usage:reconcile` clean.<br>`rates:sync` scheduled and run; no secrets in the logs.<br>A 12 KB backup restored into a throwaway server: identical rows and checksums in **24 tables**.<br>Restart: 33 purchases before and after.<br>Everything removed |
+| Deliberate breakages N1–N3 (file changed in place, tests run, file restored and checksum-verified) | **N1**, the trusted-proxy list never applied: `TrustedProxiesTest` and `ProductionBootTest` failed.<br>**N2**, demo seeding in production without `--force`: `DemoSeederTest` failed.<br>**N3**, `SESSION_SECURE_COOKIE=false` in the production boot: `ProductionBootTest` failed |
+| Leftovers after the rehearsals | No rehearsal or restore-check container, volume or network. Images: `fleetfuel-portal:local` and `fleetfuel-app:dev` |
+| The development stack (read-only) | Containers not recreated (up 18 hours, MySQL 3 days); `/health` ok; 36 purchases, 5 users. The running `app` sees the new config files |
+| After the final `make verify` and rehearsal, two kinds of change | Docs only, plus the `demo:seed` description string ("…empty database (local, or a production demo deployment with --force)"). `DemoSeederTest` + `DocumentationParityTest`: **22 passed / 780 assertions**; Pint PASS. GitHub CI runs every gate and `make rehearse` on the pushed commit |
+
+### Not run or not verified
+
+- **No live deployment:**
+  - no host, URL, HTTPS termination, or `TRUSTED_PROXIES` behind a real proxy;
+  - no smoke test on a host; the deployment record in the runbook is empty.
+- **GitHub branch protection** was not set: that is the owner's action (instructions in the runbook).
+- **Backups:** the `gpg` encryption step and a backup schedule were not run (no host). A rollback between two real releases was not rehearsed; only one release exists.
+- **GitHub CI for the M11 commit,** including the first CI run of `make rehearse` (reported in the session reply after the push).
+- **No demo recording** was made, and no application email was written or sent (by design).
+- **Carried over:**
+  - screen readers and browsers other than Chrome;
+  - the manual phone-overflow guard;
+  - MySQL duplicate-key messages quote the duplicated value;
+  - the simulator with a host PHP outside Docker;
+  - SQL Server (S01).
+
+### Decisions and deviations
+
+All are in `docs/DECISIONS.md` (2026-10-02, M11):
+- the single-container image and its entrypoint;
+- nginx passing the client's Host header;
+- `TRUSTED_PROXIES` and secure cookies;
+- the `mysql` default connection;
+- `demo:seed --force` for a production demo deployment;
+- the reference compose file;
+- backup and restore-check;
+- the rehearsal;
+- the README and the license left unchosen.
+
+No product rule and no API changed.
+
+### Remaining work and blockers
+
+None for the local M11 release candidate. The remaining release tasks need the owner:
+1. A hosting decision (a provider and account that can run a container from this image, a durable MySQL 8.4, HTTPS and a scheduler), then the deployment and its smoke test, recorded in the runbook.
+2. The public demo policy: the runbook recommends manager accounts only.
+3. A license.
+4. Branch protection on `main`.
+5. A demo recording.
+
+**Suggested commit message:** `build: add production image, deployment rehearsal and release runbook`. The build plan suggests `docs: prepare release runbook and portfolio walkthrough`; this milestone also changes the image, CI, configuration and tests, so `build:` describes it better.
+
+**One concept to explain:** build once, configure at deploy time, and trust only what you have restored.
+- **One immutable image** holds the code and its locked dependencies, and nothing secret. The same image runs the web server, the scheduler and the migrations; only the environment differs.
+- **Releases are explicit steps.** Migrations and seeding never happen on start, so restarting a container can never change the schema or the data. Rolling back means starting the previous image.
+- **A backup is only as good as its restore.** The rehearsal restores every backup into a throwaway server, checks it with the application itself, and compares every table's row count and checksum with the source.
+
+## Earlier session: M10
 
 **Date / milestone:** 2026-10-01, M10 release verification.
 
@@ -158,7 +270,7 @@ Deliberate breakages:
 
 ### Not run or not verified
 
-- GitHub CI for the M10 commit (reported in the session reply after the push).
+- GitHub CI for the M10 commit was not observed when this log was written. It was checked after the push: run 36914194485 passed (590 tests / 5987 assertions, 14 JavaScript tests, `make audit`).
 - The hosted deployment, HTTPS, secure cookies, backups and restore (M11).
 - Newman: not rerun in M10. The simulator suite covers the POS scenarios on every run.
 - Browser checks: not repeated (no UI changed in M10). The phone-overflow guard is still the manual Chrome sweep.

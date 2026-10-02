@@ -2,6 +2,7 @@
 .env.*
 !.env.example
 !.env.testing.example
+!.env.production.example
 /vendor/
 /node_modules/
 /public/build/

@@ -57,4 +57,9 @@ return [
         'password' => env('DEMO_PASSWORD'),
     ],
 
+    // The HTTPS proxy or load balancer in front of a deployment: addresses
+    // (comma-separated IPs or CIDR ranges, or * for any) whose X-Forwarded-*
+    // headers are believed. Empty trusts nobody (docs/RUNBOOK.md).
+    'trusted_proxies' => env('TRUSTED_PROXIES'),
+
 ];

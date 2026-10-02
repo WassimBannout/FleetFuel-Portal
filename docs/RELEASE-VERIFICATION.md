@@ -1,6 +1,6 @@
 # Release verification (M10)
 
-Evidence for the MVP release gate in [the build plan](08-BUILD-PLAN.md): every applicable acceptance case T01–T35 from [the test plan](07-TEST-PLAN.md), the CI-equivalent quality gates, a clean-checkout rehearsal, documentation and contract parity, a dependency check and a review of authorization, money, idempotency, audit and CSV handling. Recorded on 2026-10-01. Hosting, backups and the live deployment are M11; SQL Server (S01) was not attempted.
+Evidence for the MVP release gate in [the build plan](08-BUILD-PLAN.md): every applicable acceptance case T01–T35 from [the test plan](07-TEST-PLAN.md), the CI-equivalent quality gates, a clean-checkout rehearsal, documentation and contract parity, a dependency check and a review of authorization, money, idempotency, audit and CSV handling. Recorded on 2026-10-01. Hosting, backups and the live deployment are M11; SQL Server (S01) was not attempted. M11 added the production image, backup and restore, and a local deployment rehearsal: see [the runbook](RUNBOOK.md).
 
 Everything below was run on MySQL 8.4 in the project's Docker stack (PHP 8.3, Laravel 13, Node 24). "Automated" means a test in `make test`, which CI runs on every push.
 

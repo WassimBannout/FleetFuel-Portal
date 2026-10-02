@@ -2,7 +2,7 @@
 
 This folder began as a complete **implementation handoff**, prepared on 2026-09-28, when no application had been built yet. Everything needed to direct the build is here; you do not need the previous chat or the file in Downloads.
 
-**Status, 2026-10-01:** milestones M00–M10 are built and verified (see [docs/PROGRESS.md](docs/PROGRESS.md) and [docs/RELEASE-VERIFICATION.md](docs/RELEASE-VERIFICATION.md)). M11 is next. The steps below still describe how to continue and how to resume a session.
+**Status, 2026-10-02:** the MVP milestones M00–M11 are built and verified locally (see [docs/PROGRESS.md](docs/PROGRESS.md), [docs/RELEASE-VERIFICATION.md](docs/RELEASE-VERIFICATION.md) and [docs/RUNBOOK.md](docs/RUNBOOK.md)). A live deployment is pending the owner's hosting decision; SQL Server (S01) is optional. The steps below still describe how to resume a session.
 
 ## 1. Open Claude Code in this folder
 

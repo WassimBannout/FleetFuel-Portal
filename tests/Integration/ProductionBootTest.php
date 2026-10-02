@@ -92,6 +92,16 @@ class ProductionBootTest extends TestCase
         }
         $this->assertStringNotContainsString('@vite/client', $login);
 
+        // Behind the trusted HTTPS proxy the app builds https URLs, and the
+        // session cookie is only ever sent over HTTPS.
+        [$status, $proxied, $headers] = $this->fetch('/login', ['X-Forwarded-Proto: https', 'X-Forwarded-Host: fleetfuel.example.com', 'X-Forwarded-Port: 443']);
+        $this->assertSame(200, $status);
+        $this->assertStringContainsString('action="https://fleetfuel.example.com/login"', $proxied);
+        $sessionCookie = array_values(array_filter($headers, fn (string $header): bool => stripos($header, 'Set-Cookie: fleetfuel-portal-session=') === 0));
+        $this->assertCount(1, $sessionCookie, implode("\n", $headers));
+        $this->assertMatchesRegularExpression('/;\s*secure/i', $sessionCookie[0]);
+        $this->assertMatchesRegularExpression('/;\s*httponly/i', $sessionCookie[0]);
+
         [$status, $missing] = $this->fetch('/no-such-page');
         $this->assertSame(404, $status);
         $this->assertStringContainsString('Page not found', $missing);
@@ -146,6 +156,9 @@ class ProductionBootTest extends TestCase
             'DB_USERNAME' => (string) $mysql['username'],
             'DB_PASSWORD' => (string) $mysql['password'],
             'SESSION_DRIVER' => 'database',
+            'SESSION_SECURE_COOKIE' => 'true',
+            // PHP's built-in server stands in for the HTTPS proxy in front of the app.
+            'TRUSTED_PROXIES' => '127.0.0.1',
             'CACHE_STORE' => 'database',
             'LOG_CHANNEL' => 'stderr',
             'LOG_LEVEL' => 'error',
@@ -199,18 +212,20 @@ class ProductionBootTest extends TestCase
     }
 
     /**
-     * @return array{int, string} status code and body
+     * @param  list<string>  $headers  extra request headers, such as "X-Forwarded-Proto: https"
+     * @return array{int, string, list<string>} status code, body and response headers
      */
-    private function fetch(string $path): array
+    private function fetch(string $path, array $headers = []): array
     {
         $accept = str_starts_with($path, '/api/') ? 'application/json' : 'text/html';
-        $context = stream_context_create(['http' => ['timeout' => 10, 'ignore_errors' => true, 'header' => "Accept: {$accept}\r\n"]]);
+        $request = implode("\r\n", ["Accept: {$accept}", ...$headers])."\r\n";
+        $context = stream_context_create(['http' => ['timeout' => 10, 'ignore_errors' => true, 'header' => $request]]);
 
         $body = file_get_contents($this->baseUrl.$path, false, $context);
         $this->assertIsString($body, "No answer from {$path}.");
         preg_match('#^HTTP/\S+ (\d{3})#', $http_response_header[0], $status);
 
-        return [(int) ($status[1] ?? 0), $body];
+        return [(int) ($status[1] ?? 0), $body, $http_response_header];
     }
 
     private function assertLogged(string $text): void

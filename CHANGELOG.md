@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- M11 shipping preparation:
+  - A production image (`docker/production/Dockerfile`, `make prod-image`):
+    - nginx and PHP-FPM in one container, as a non-root user;
+    - locked production Composer packages and compiled Vite assets;
+    - configuration from environment variables, cached on start; it never migrates on its own.
+  - `compose.production.yaml` (app, one scheduler, MySQL, no bind mounts) and `.env.production.example`.
+  - `make rehearse` (also in CI) deploys the image locally with disposable data, then removes everything:
+    - the release steps;
+    - sign-in;
+    - the Postman POS, delivery, report and CSV scenarios with Newman;
+    - the scheduler;
+    - a log check;
+    - a backup, restored into a throwaway database and compared table by table;
+    - a restart.
+  - `docker/production/backup.sh` and `restore-check.sh`, and the runbook (`docs/RUNBOOK.md`): deployment, releases, rollback, scheduler, backups, restore, failure handling, the demo policy, GitHub settings.
+  - `TRUSTED_PROXIES` for the HTTPS proxy; secure session cookies in the production template; the default database connection is MySQL.
+  - `php artisan demo:seed --force` seeds a dedicated production demo deployment (still only with `DEMO_MODE=true` and an empty database).
+  - Fixed in the image: Debian's nginx dropped the port from generated URLs (`HTTP_HOST` set to `$host`).
+  - The README is rewritten from the implementation. New `docs/DEMO-SCRIPT.md` and `docs/PORTFOLIO.md` (résumé bullets from measured results). The live deployment is pending the owner's hosting decision.
 - M10 release verification:
   - Acceptance cases T01–T35 audited against the tests (docs/RELEASE-VERIFICATION.md); the missing ones now have tests:
     - T35: `ProductionBootTest` serves real HTTP from `php artisan optimize` caches in production mode, with debug off.

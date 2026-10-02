@@ -1,0 +1,59 @@
+# Production-style stack (M11): the production image with MySQL and one
+# scheduler. There is no source bind mount, and every setting comes from an
+# env file that is never committed (template: .env.production.example).
+# Used by the local rehearsal (`make rehearse`) and as a reference for a
+# single Docker host; docs/RUNBOOK.md has the commands.
+#
+#     docker compose --env-file .env.production -f compose.production.yaml up -d
+#
+# --env-file supplies the values used below (database name, user, password,
+# port); env_file passes the whole file to the application containers.
+name: fleetfuel-production
+
+x-app: &app
+    image: ${FLEETFUEL_IMAGE:-fleetfuel-portal:local}
+    build:
+        context: .
+        dockerfile: docker/production/Dockerfile
+    env_file: ${FLEETFUEL_ENV_FILE:-.env.production}
+    depends_on:
+        mysql:
+            condition: service_healthy
+    restart: unless-stopped
+
+services:
+    # nginx + PHP-FPM. Put an HTTPS proxy in front of it; see TRUSTED_PROXIES.
+    app:
+        <<: *app
+        ports:
+            - "127.0.0.1:${APP_PORT:-8090}:8080"
+
+    # Exactly one scheduler: it runs rates:sync daily at 01:00 UTC.
+    scheduler:
+        <<: *app
+        command: ["php", "artisan", "schedule:work"]
+        # No web server in this container, so the image's /up check does not apply.
+        healthcheck:
+            disable: true
+
+    mysql:
+        image: mysql:8.4
+        # Same settings as development: utf8mb4 and a UTC server clock.
+        command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--default-time-zone=+00:00"]
+        environment:
+            MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+            MYSQL_DATABASE: ${DB_DATABASE:?Set DB_DATABASE in the env file}
+            MYSQL_USER: ${DB_USERNAME:?Set DB_USERNAME in the env file}
+            MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in the env file}
+        volumes:
+            - mysql-data:/var/lib/mysql
+        healthcheck:
+            test: ["CMD-SHELL", "mysqladmin ping --silent -h 127.0.0.1 -u\"$$MYSQL_USER\" -p\"$$MYSQL_PASSWORD\""]
+            interval: 5s
+            timeout: 5s
+            retries: 30
+            start_period: 30s
+        restart: unless-stopped
+
+volumes:
+    mysql-data:

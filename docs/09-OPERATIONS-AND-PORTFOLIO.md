@@ -1,6 +1,6 @@
 # Shipping, maintenance and portfolio
 
-This is a build/runbook specification. M11 replaces planned commands with tested commands for the chosen deployment. No hosting service, live demo, Git remote or CI result is currently provisioned.
+This is a build/runbook specification. The tested commands are in [the runbook](RUNBOOK.md) (M11). The repository is on GitHub, and CI runs on every push. No hosting service or live demo is provisioned yet.
 
 ## Local operational checklist
 

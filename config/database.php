@@ -17,7 +17,9 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', 'sqlite'),
+    // MySQL is the only supported database (D03); a deployment that forgets
+    // DB_CONNECTION must not fall back to an empty SQLite file.
+    'default' => env('DB_CONNECTION', 'mysql'),
 
     /*
     |--------------------------------------------------------------------------

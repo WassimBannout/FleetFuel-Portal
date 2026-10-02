@@ -25,6 +25,7 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Date;
@@ -92,6 +93,7 @@ class AppServiceProvider extends ServiceProvider
         // Blade lists render Bootstrap 5 pagination links.
         Paginator::useBootstrapFive();
 
+        $this->configureTrustedProxies();
         $this->configureAuthentication();
         $this->configureRateLimiting();
         $this->bindTenantScopedModels();
@@ -144,6 +146,21 @@ class AppServiceProvider extends ServiceProvider
 
             return $scopedQuery($user)->findOrFail((int) $value);
         });
+    }
+
+    /**
+     * Behind an HTTPS proxy the app sees plain HTTP from the proxy's address.
+     * The proxy's X-Forwarded-* headers (original scheme, host and client
+     * IP) are believed only from the addresses in TRUSTED_PROXIES, so
+     * anyone else cannot fake them. Unset trusts nobody.
+     */
+    private function configureTrustedProxies(): void
+    {
+        $proxies = config('fleetfuel.trusted_proxies');
+
+        if (is_string($proxies) && trim($proxies) !== '') {
+            TrustProxies::at(trim($proxies) === '*' ? '*' : array_values(array_filter(array_map('trim', explode(',', $proxies)))));
+        }
     }
 
     private function configureAuthentication(): void

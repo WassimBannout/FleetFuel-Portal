@@ -11,9 +11,10 @@ use Throwable;
 class SeedDemoData extends Command
 {
     protected $signature = 'demo:seed
-        {--as-of= : Clock for the demo data, an ISO-8601 instant with offset such as 2026-09-28T09:00:00Z (default: now)}';
+        {--as-of= : Clock for the demo data, an ISO-8601 instant with offset such as 2026-09-28T09:00:00Z (default: now)}
+        {--force : Also allow a production deployment that serves as a public demo (still needs DEMO_MODE=true and an empty database)}';
 
-    protected $description = 'Seed fictional demo data into an empty local database';
+    protected $description = 'Seed fictional demo data into an empty database (local, or a production demo deployment with --force)';
 
     public function handle(): int
     {
@@ -28,7 +29,7 @@ class SeedDemoData extends Command
 
         try {
             $seeder = $this->laravel->make(DemoSeeder::class);
-            $seeder->setContainer($this->laravel)->setCommand($this)->__invoke(['asOf' => $asOf]);
+            $seeder->setContainer($this->laravel)->setCommand($this)->__invoke(['asOf' => $asOf, 'hostedDemo' => (bool) $this->option('force')]);
         } catch (RuntimeException $e) {
             // Guard refusals (environment, DEMO_MODE, missing password).
             $this->error($e->getMessage());

@@ -34,7 +34,9 @@ use RuntimeException;
  * Deterministic, fictional demo data relative to an "as of" instant.
  *
  * Guarded: runs only in the local or testing environment with DEMO_MODE on,
- * a DEMO_PASSWORD set and no existing users. It only inserts, so a repeated
+ * a DEMO_PASSWORD set and no existing users. A production deployment that
+ * serves as a public demo may seed too, but only through an explicit
+ * `php artisan demo:seed --force` (docs/RUNBOOK.md). It only inserts, so a repeated
  * run changes nothing. `make setup` seeds as of now; use
  * `php artisan demo:seed --as-of=2026-09-28T09:00:00Z` to pick the clock.
  *
@@ -144,9 +146,9 @@ class DemoSeeder extends Seeder
 
     public function __construct(private readonly LedgerFixtureBuilder $builder) {}
 
-    public function run(?string $asOf = null): void
+    public function run(?string $asOf = null, bool $hostedDemo = false): void
     {
-        $this->assertAllowed();
+        $this->assertAllowed($hostedDemo);
 
         if (User::query()->exists()) {
             $this->command->info('The database already has users; demo data was not seeded and nothing changed.');
@@ -162,10 +164,12 @@ class DemoSeeder extends Seeder
         $this->command->table(['Table', 'Rows'], $this->counts());
     }
 
-    private function assertAllowed(): void
+    private function assertAllowed(bool $hostedDemo): void
     {
-        if (! app()->environment(['local', 'testing'])) {
-            throw new RuntimeException('Demo data may only be seeded in the local or testing environment.');
+        $allowed = app()->environment(['local', 'testing']) || ($hostedDemo && app()->isProduction());
+
+        if (! $allowed) {
+            throw new RuntimeException('Demo data may only be seeded in the local or testing environment, or on a production demo deployment with `php artisan demo:seed --force`.');
         }
 
         if (! config('fleetfuel.demo.enabled')) {
