@@ -220,18 +220,27 @@ Every demo account shares `DEMO_PASSWORD`, so the owner has to choose what revie
   Then no public account can change prices or submit purchases. Show the admin and POS parts in a recording or a private guided demo.
 - A demo reset would mean wiping and reseeding the demo database. No reset is scheduled; if one is wanted, it needs a separate decision and runs only on the demo database.
 
-## GitHub settings (owner action, not done)
+## GitHub settings (set on 2026-10-02)
 
-CI already runs on every push to `main` and on pull requests (`.github/workflows/ci.yml`).
+The repository is public. CI runs on every push to `main` and on every pull request (`.github/workflows/ci.yml`).
 
-To require it before merging: in the repository settings, add a branch rule for `main`. Require a pull request, require the status check "Setup and quality gates", and block force pushes. That cannot be set from this repository's files. Ask before anyone changes it on your behalf.
+**Branch protection on `main`:**
+- changes arrive only through a pull request; no approval is required, because there is one maintainer;
+- the status check "Setup and quality gates" must pass, on a branch that is up to date with `main`;
+- the rule applies to administrators too;
+- force pushes and deleting `main` are blocked.
 
-**Blocked while the repository is private.** On 2026-10-02 the repository was private on a free GitHub plan. GitHub's API refused both branch protection and rulesets for it (HTTP 403: "Upgrade to GitHub Pro or make this repository public to enable this feature"). The rule can be added once the owner makes the repository public or upgrades the plan.
+To change it: the repository's Settings → Branches. It cannot be set from this repository's files.
 
-Making the repository public publishes its whole history, not only the current files. Checked on 2026-10-02:
-- **Secrets:** a gitleaks v8.28.0 scan of all 10 commits found one match, a false positive: the `YOUR-TOKEN` placeholder in the station page's curl example. No `.env`, key, dump or backup file was ever committed, only the `.example` templates.
-- **Commit email:** every commit records the author's email address, which becomes public with the history. Since 2026-10-02, this repository's local Git config uses the owner's GitHub noreply address, so new commits no longer show the personal one. The 11 earlier commits still do, because a noreply address protects future commits only. Changing past commits would need a history rewrite and a force push; that is the owner's call and not part of this runbook.
-- **Repository details:** the MIT license, the description and the topics were added on 2026-10-02. The website stays empty until a demo URL exists.
+**Merging.** Push a branch, open a pull request and merge it once the check passes. GitHub writes the merge commit itself and otherwise takes an email from the account's settings, so pass the noreply address: `gh pr merge --squash --author-email <noreply address>`.
+
+**Before going public.** Making the repository public published its whole history, not only the current files. Checked on 2026-10-02:
+- **Secrets:** a gitleaks v8.28.0 scan of all 10 commits at the time found one match, a false positive: the `YOUR-TOKEN` placeholder in the station page's curl example. No `.env`, key, dump or backup file was ever committed, only the `.example` templates.
+- **CI:** the workflow uses no GitHub secrets. The logs of all 12 runs at the time contained no password, application key or API token. There were no issues, pull requests or stored artifacts.
+- **Commit email:** this repository's local Git config uses the owner's GitHub noreply address, so new commits do not show the personal one. The 11 commits before 2026-10-02 still do; the owner chose to keep the history unchanged rather than rewrite it.
+- **Repository details:** the MIT license, the description and the topics. The website stays empty until a demo URL exists.
+
+While the repository was private on a free plan, GitHub refused branch protection and rulesets (HTTP 403: "Upgrade to GitHub Pro or make this repository public to enable this feature").
 
 ## Deployment record
 

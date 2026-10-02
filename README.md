@@ -320,7 +320,7 @@ Query plans measured on 64,032 purchases led to one added index, `fuel_transacti
 | Check | Result |
 | --- | --- |
 | `make verify`: Pint, Larastan level 6, PHPUnit on MySQL 8.4, the JavaScript unit tests, the production asset build | 593 PHPUnit tests (6,027 assertions) and 14 JavaScript tests pass |
-| GitHub Actions ([workflow](.github/workflows/ci.yml)) | The same gates from a clean checkout on every push, plus the repeated-setup check, `make audit` and `make rehearse` |
+| GitHub Actions ([workflow](.github/workflows/ci.yml)) | The same gates from a clean checkout on every push and pull request, plus the repeated-setup check, `make audit` and `make rehearse`. `main` is protected: changes merge only through a pull request that passes them |
 | `make audit` | No known advisories in the locked Composer and npm dependencies |
 | `make rehearse` | The production image deployed locally with disposable data, end to end (see below) |
 
